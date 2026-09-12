@@ -9,6 +9,11 @@
   const lobbyMessage = $('#lobby-message');
   const modal = $('#modal');
   const modalContent = $('#modal-content');
+  const playDialog = $('#play-dialog');
+  const deckDialog = $('#deck-dialog');
+  const matchmakingArea = $('#matchmaking-active-area');
+  const startMatchmakingBtn = $('#start-matchmaking-button');
+  const cancelMatchmakingBtn = $('#cancel-matchmaking-button');
   const toast = $('#toast');
   const effectLayer = $('#effect-layer');
 
@@ -20,12 +25,23 @@
     indigo: '#7e84ea', purple: '#b279e9', black: '#525b64'
   };
 
+  const DEFAULT_DECK = [
+    'jeonjangyeon', 'face-fish', 'snorlax', 'mecha', 'hair', 'jongchu', 'biker',
+    'saurus', 'jongbaragi', 'knight', 'running-man', 'taekwondo', 'menhera', 'nature-disaster',
+    'patience', 'learning', 'sociability', 'patience', 'learning', 'sociability',
+    'draw-one-mob', 'bag', 'no-ai', 'cleanse', 'positive-negative', 'return-class',
+    'eraser', 'hyperfocus', 'pop-quiz', 'ahe', 'draw-one-mob', 'bag', 'no-ai',
+    'cleanse', 'positive-negative', 'return-class', 'eraser', 'hyperfocus', 'pop-quiz'
+  ];
+
   let definitions = new Map();
   let state = null;
   let selected = null;
   let pending = null;
   let activeRoomCode = null;
   let playerId = localStorage.getItem('goa-player-id') || makePlayerId();
+  let currentCustomDeck = [];
+  let isMatchmaking = false;
   let socket;
   let reconnecting = false;
   let effectQueue = [];
@@ -56,6 +72,39 @@
     return accents[card?.visual?.accent] || '#a5c9c4';
   }
 
+  function cardImageUrl(img) {
+    if (!img) return '';
+    if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('/')) return img;
+    return `/image/${img}`;
+  }
+
+  function loadSavedDeck() {
+    try {
+      const raw = localStorage.getItem('goa-player-deck');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length >= 10) {
+          currentCustomDeck = parsed;
+          updateDeckBadge();
+          return;
+        }
+      }
+    } catch (_e) {}
+    currentCustomDeck = [...DEFAULT_DECK];
+    saveDeckToStorage();
+    updateDeckBadge();
+  }
+
+  function saveDeckToStorage() {
+    localStorage.setItem('goa-player-deck', JSON.stringify(currentCustomDeck));
+    updateDeckBadge();
+  }
+
+  function updateDeckBadge() {
+    const badge = $('#deck-status-badge');
+    if (badge) badge.textContent = `${currentCustomDeck.length}장 구성됨`;
+  }
+
   function showToast(message, kind = '') {
     toast.textContent = message;
     toast.className = `toast visible ${kind}`;
@@ -80,6 +129,7 @@
       if (!response.ok) throw new Error('카드 데이터를 불러오지 못했습니다.');
       const payload = await response.json();
       definitions = new Map(payload.cards.map((card) => [card.id, card]));
+      loadSavedDeck();
     } catch (error) {
       setLobbyMessage(error.message, true);
     }
@@ -93,7 +143,8 @@
         socket.emit('joinRoom', {
           code: activeRoomCode,
           name: localStorage.getItem('goa-player-name'),
-          playerId
+          playerId,
+          customDeck: currentCustomDeck
         }, (reply) => {
           if (!reply?.ok) showToast(reply?.message || '방 재연결에 실패했습니다.', 'error');
         });
@@ -105,8 +156,17 @@
       state = nextState;
       activeRoomCode = nextState.roomCode;
       localStorage.setItem('goa-room-code', activeRoomCode);
+      if (playDialog.close) playDialog.close();
+      if (deckDialog.close) deckDialog.close();
       showGame();
       render();
+    });
+    socket.on('matchFound', (_data) => {
+      isMatchmaking = false;
+      if (matchmakingArea) matchmakingArea.classList.add('hidden');
+      if (startMatchmakingBtn) startMatchmakingBtn.classList.remove('hidden');
+      if (playDialog.close) playDialog.close();
+      showToast('상대를 찾았습니다! 대전을 시작합니다.');
     });
     socket.on('gameEffect', (event) => enqueueEffect(event));
   }
@@ -140,14 +200,170 @@
     return value;
   }
 
+  function openPlayModal() {
+    const name = cleanName();
+    if (!name) return;
+    if (playDialog?.showModal) playDialog.showModal();
+    else if (playDialog) playDialog.setAttribute('open', '');
+  }
+
+  function closePlayModal() {
+    cancelMatchmaking();
+    if (playDialog?.close) playDialog.close();
+    else if (playDialog) playDialog.removeAttribute('open');
+  }
+
+  function openDeckBuilder() {
+    renderDeckBuilder();
+    if (deckDialog?.showModal) deckDialog.showModal();
+    else if (deckDialog) deckDialog.setAttribute('open', '');
+  }
+
+  function closeDeckBuilder() {
+    if (deckDialog?.close) deckDialog.close();
+    else if (deckDialog) deckDialog.removeAttribute('open');
+  }
+
+  function renderDeckBuilder() {
+    const currentGrid = $('#current-deck-grid');
+    const catalogGrid = $('#catalog-card-grid');
+    const countIndicator = $('#deck-count-indicator');
+    const currentCount = $('#deck-current-count');
+
+    if (countIndicator) countIndicator.innerHTML = `총 <b>${currentCustomDeck.length}</b>장 (최소 10장)`;
+    if (currentCount) currentCount.textContent = currentCustomDeck.length;
+
+    const counts = new Map();
+    currentCustomDeck.forEach((id) => {
+      counts.set(id, (counts.get(id) || 0) + 1);
+    });
+
+    let currentHtml = '';
+    const sortedIds = Array.from(counts.keys()).sort((a, b) => {
+      const cardA = definition(a);
+      const cardB = definition(b);
+      const order = { mob: 1, attachment: 2, consumable: 3 };
+      return (order[cardA?.type] || 4) - (order[cardB?.type] || 4);
+    });
+
+    sortedIds.forEach((id) => {
+      const card = definition(id);
+      if (!card) return;
+      const count = counts.get(id);
+      const thumb = card.image
+        ? `<img src="${cardImageUrl(card.image)}" alt="${escapeHtml(card.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='';" /><span style="display:none;">${escapeHtml(card.visual?.icon || '◆')}</span>`
+        : `<span>${escapeHtml(card.visual?.icon || '◆')}</span>`;
+      const typeLabel = card.type === 'mob' ? '몹' : card.type === 'attachment' ? '부착' : '소모';
+
+      currentHtml += `
+        <div class="builder-card" data-remove-card="${escapeHtml(id)}" title="클릭하여 1장 제거">
+          <span class="card-count-badge">×${count}</span>
+          <div class="builder-card-thumb" style="color:${cardColor(card)}">${thumb}</div>
+          <div class="builder-card-name">${escapeHtml(card.name)}</div>
+          <div class="builder-card-type"><span>${typeLabel}</span><small style="color:#ef8278">제거 -</small></div>
+        </div>
+      `;
+    });
+
+    if (currentGrid) {
+      currentGrid.innerHTML = currentHtml || '<p style="grid-column: 1/-1; color:#8ea09b; padding:1.5rem; text-align:center;">덱에 카드가 없습니다. 아래 도감에서 카드를 클릭해 추가하세요.</p>';
+    }
+
+    let catalogHtml = '';
+    definitions.forEach((card) => {
+      if (card.hidden) return;
+      const thumb = card.image
+        ? `<img src="${cardImageUrl(card.image)}" alt="${escapeHtml(card.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='';" /><span style="display:none;">${escapeHtml(card.visual?.icon || '◆')}</span>`
+        : `<span>${escapeHtml(card.visual?.icon || '◆')}</span>`;
+      const typeLabel = card.type === 'mob' ? '몹' : card.type === 'attachment' ? '부착' : '소모';
+      const inDeckCount = counts.get(card.id) || 0;
+
+      catalogHtml += `
+        <div class="builder-card" data-add-card="${escapeHtml(card.id)}" title="클릭하여 덱에 1장 추가">
+          ${inDeckCount > 0 ? `<span class="card-count-badge" style="background:#5ed4c0; color:#062327;">보유 ${inDeckCount}</span>` : ''}
+          <div class="builder-card-thumb" style="color:${cardColor(card)}">${thumb}</div>
+          <div class="builder-card-name">${escapeHtml(card.name)}</div>
+          <div class="builder-card-type"><span>${typeLabel}</span><small style="color:#64dfc8">추가 +</small></div>
+        </div>
+      `;
+    });
+
+    if (catalogGrid) {
+      catalogGrid.innerHTML = catalogHtml;
+    }
+  }
+
+  function addCardToDeck(cardId) {
+    if (cardId === 'nature-disaster') {
+      if (currentCustomDeck.includes('nature-disaster')) {
+        showToast('자연재해?? 카드는 덱에 최대 1장만 포함할 수 있습니다.', 'error');
+        return;
+      }
+    }
+    if (currentCustomDeck.length >= 60) {
+      showToast('덱은 최대 60장까지 구성할 수 있습니다.', 'error');
+      return;
+    }
+    currentCustomDeck.push(cardId);
+    saveDeckToStorage();
+    renderDeckBuilder();
+  }
+
+  function removeCardFromDeck(cardId) {
+    const idx = currentCustomDeck.lastIndexOf(cardId);
+    if (idx !== -1) {
+      currentCustomDeck.splice(idx, 1);
+      saveDeckToStorage();
+      renderDeckBuilder();
+    }
+  }
+
+  function startMatchmaking() {
+    const name = cleanName();
+    if (!name) return;
+    if (currentCustomDeck.length < 10) {
+      showToast('덱 편성이 최소 10장 이상이어야 합니다.', 'error');
+      return;
+    }
+    const hasMob = currentCustomDeck.some((id) => definition(id)?.type === 'mob' && id !== 'nature-disaster');
+    if (!hasMob) {
+      showToast('덱에 시작 몹 카드가 최소 1장 이상 있어야 합니다.', 'error');
+      return;
+    }
+
+    isMatchmaking = true;
+    if (startMatchmakingBtn) startMatchmakingBtn.classList.add('hidden');
+    if (matchmakingArea) matchmakingArea.classList.remove('hidden');
+
+    socket.emit('startMatchmaking', {
+      name,
+      playerId,
+      customDeck: currentCustomDeck
+    }, (reply) => {
+      if (!reply?.ok) {
+        showToast(reply?.message || '매치메이킹 등록에 실패했습니다.', 'error');
+        cancelMatchmaking();
+      }
+    });
+  }
+
+  function cancelMatchmaking() {
+    if (!isMatchmaking) return;
+    isMatchmaking = false;
+    socket.emit('cancelMatchmaking');
+    if (matchmakingArea) matchmakingArea.classList.add('hidden');
+    if (startMatchmakingBtn) startMatchmakingBtn.classList.remove('hidden');
+  }
+
   async function createRoom() {
     const name = cleanName();
     if (!name) return;
-    const reply = await send('createRoom', { name, playerId });
+    const reply = await send('createRoom', { name, playerId, customDeck: currentCustomDeck });
     if (!reply.ok) {
       setLobbyMessage(reply.message || '방을 만들 수 없습니다.', true);
       return;
     }
+    closePlayModal();
     activeRoomCode = reply.code;
     updateRoomUrl(reply.code);
     setLobbyMessage(`방 ${reply.code}를 만들었습니다. 친구를 기다리는 중입니다.`);
@@ -161,11 +377,12 @@
       setLobbyMessage('5자리 방 코드를 입력해 주세요.', true);
       return;
     }
-    const reply = await send('joinRoom', { code, name, playerId });
+    const reply = await send('joinRoom', { code, name, playerId, customDeck: currentCustomDeck });
     if (!reply.ok) {
       setLobbyMessage(reply.message || '방에 입장할 수 없습니다.', true);
       return;
     }
+    closePlayModal();
     playerId = reply.playerId;
     localStorage.setItem('goa-player-id', playerId);
     activeRoomCode = reply.code;
@@ -242,10 +459,13 @@
     const targetableClass = isTargetable(owner, mob) ? 'targetable' : '';
     const damaged = mob.hp / mob.maxHp < 0.35 ? 'critical' : '';
     const skills = card.skills?.filter((skill) => skill.effect !== 'passive').length || 0;
+    const artContent = card.image
+      ? `<img class="card-art-img" src="${cardImageUrl(card.image)}" alt="${escapeHtml(card.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='';" /><span style="display:none;">${escapeHtml(card.visual?.icon || '◆')}</span>`
+      : `<span>${escapeHtml(card.visual?.icon || '◆')}</span>`;
     return `<article class="game-card mob-card ${owner} ${selectedClass} ${targetableClass} ${damaged}" data-uid="${mob.uid}" data-owner="${owner}" data-index="${index}" style="--card-accent:${cardColor(card)}" role="button" tabindex="0" aria-label="${escapeHtml(card.name)} 카드">
       <div class="card-glow"></div>
       <div class="card-top"><span class="card-type">몹</span><span class="card-icon">${escapeHtml(card.visual?.icon || '◆')}</span></div>
-      <div class="card-art"><span>${escapeHtml(card.visual?.icon || '◆')}</span></div>
+      <div class="card-art">${artContent}</div>
       <h3>${escapeHtml(card.name)}</h3>
       <div class="health"><span>HP</span><b>${mob.hp}</b><i>/ ${mob.maxHp}</i></div>
       <div class="health-bar"><i style="width:${Math.max(0, Math.min(100, mob.hp / mob.maxHp * 100))}%"></i></div>
@@ -261,9 +481,12 @@
     const selectedClass = selected?.uid === instance.uid ? 'selected' : '';
     const isMob = card.type === 'mob';
     const hp = isMob ? `<div class="hand-hp">HP ${instance.hp}/${instance.maxHp}</div>` : `<p class="item-effect">${escapeHtml(card.text || '효과 카드')}</p>`;
+    const artContent = card.image
+      ? `<img class="card-art-img" src="${cardImageUrl(card.image)}" alt="${escapeHtml(card.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='';" /><span style="display:none;">${escapeHtml(card.visual?.icon || '◆')}</span>`
+      : `<span>${escapeHtml(card.visual?.icon || '◆')}</span>`;
     return `<article class="hand-card ${card.type} ${selectedClass}" data-uid="${instance.uid}" draggable="${state?.isMyTurn ? 'true' : 'false'}" style="--card-accent:${cardColor(card)}" role="button" tabindex="0">
       <div class="hand-card-top"><span>${escapeHtml(card.type === 'mob' ? '몹' : card.type === 'attachment' ? '부착' : '소모')}</span><b>${escapeHtml(card.visual?.icon || '◆')}</b></div>
-      <div class="hand-icon">${escapeHtml(card.visual?.icon || '◆')}</div>
+      <div class="hand-icon">${artContent}</div>
       <h3>${escapeHtml(card.name)}</h3>
       ${hp}
       ${isMob && instance.stacks ? `<div class="hand-stacks">${stackMarkup(instance)}</div>` : ''}
@@ -326,8 +549,11 @@
     if (own && state.isMyTurn && current.zone === 'board' && card.id === 'nature-disaster') {
       action += '<button class="button special-action" type="button" data-devour>다른 아군 몹 포식</button>';
     }
+    const thumbContent = card.image
+      ? `<img class="inspector-thumb-img" src="${cardImageUrl(card.image)}" alt="${escapeHtml(card.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='';" /><span style="display:none;">${escapeHtml(card.visual?.icon || '◆')}</span>`
+      : `<span>${escapeHtml(card.visual?.icon || '◆')}</span>`;
     inspector.innerHTML = `<div class="inspector-card" style="--card-accent:${cardColor(card)}">
-      <div class="inspector-heading"><span class="detail-icon">${escapeHtml(card.visual?.icon || '◆')}</span><div><p>${escapeHtml(mob ? '몹 카드' : card.type === 'attachment' ? '부착형 아이템' : '소모형 아이템')}</p><h2>${escapeHtml(card.name)}</h2></div></div>
+      <div class="inspector-heading"><span class="detail-icon">${thumbContent}</span><div><p>${escapeHtml(mob ? '몹 카드' : card.type === 'attachment' ? '부착형 아이템' : '소모형 아이템')}</p><h2>${escapeHtml(card.name)}</h2></div></div>
       ${mob ? `<div class="detail-health"><b>${current.instance.hp}</b><span>/ ${current.instance.maxHp} HP</span></div>` : ''}
       ${mob ? passive : `<p class="detail-text">${escapeHtml(card.text)}</p>`}
       ${mob ? `<div class="detail-line"><span>상태</span><b>${statusText(current.instance)}</b></div>${attachmentNames}<div class="skill-list">${skills || '<p class="empty-copy">사용할 수 있는 스킬이 없습니다.</p>'}</div>` : ''}
@@ -487,7 +713,10 @@
     const isMob = card.type === 'mob';
     const skills = card.skills?.map((skill) => `<li><strong>${escapeHtml(skill.name)}</strong><span>${escapeHtml(skill.text)}</span></li>`).join('') || '';
     const passive = card.passive ? `<div class="modal-passive"><strong>특성 · ${escapeHtml(card.passive.name)}</strong><p>${escapeHtml(card.passive.text)}</p></div>` : '';
-    return `<article class="modal-card-detail" style="--card-accent:${cardColor(card)}"><div class="modal-card-art">${escapeHtml(card.visual?.icon || '◆')}</div><div><p class="eyebrow">${isMob ? '몹 카드' : card.type === 'attachment' ? '부착형 아이템' : '소모형 아이템'}</p><h2>${escapeHtml(card.name)}</h2>${isMob ? `<p class="modal-hp">HP <b>${instance?.hp ?? card.hp}</b> / ${instance?.maxHp ?? card.hp}</p>` : `<p>${escapeHtml(card.text)}</p>`}${passive}${skills ? `<ul class="modal-skills">${skills}</ul>` : ''}</div></article>`;
+    const modalArt = card.image
+      ? `<img class="card-art-img" src="${cardImageUrl(card.image)}" alt="${escapeHtml(card.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='';" /><span style="display:none;">${escapeHtml(card.visual?.icon || '◆')}</span>`
+      : `<span>${escapeHtml(card.visual?.icon || '◆')}</span>`;
+    return `<article class="modal-card-detail" style="--card-accent:${cardColor(card)}"><div class="modal-card-art">${modalArt}</div><div><p class="eyebrow">${isMob ? '몹 카드' : card.type === 'attachment' ? '부착형 아이템' : '소모형 아이템'}</p><h2>${escapeHtml(card.name)}</h2>${isMob ? `<p class="modal-hp">HP <b>${instance?.hp ?? card.hp}</b> / ${instance?.maxHp ?? card.hp}</p>` : `<p>${escapeHtml(card.text)}</p>`}${passive}${skills ? `<ul class="modal-skills">${skills}</ul>` : ''}</div></article>`;
   }
 
   function openModal(content) {
@@ -554,9 +783,57 @@
     navigator.clipboard?.writeText(invite).then(() => showToast('초대 링크를 복사했습니다.')).catch(() => showToast(`방 코드: ${code}`));
   }
 
+  nameInput.addEventListener('input', () => {
+    localStorage.setItem('goa-player-name', nameInput.value.trim());
+  });
+
+  $('#open-play-button')?.addEventListener('click', openPlayModal);
+  $('#play-dialog-close')?.addEventListener('click', closePlayModal);
+  $('#start-matchmaking-button')?.addEventListener('click', startMatchmaking);
+  $('#cancel-matchmaking-button')?.addEventListener('click', cancelMatchmaking);
+  playDialog?.addEventListener('click', (event) => {
+    if (event.target === playDialog) closePlayModal();
+  });
+
+  $('#open-deck-builder-button')?.addEventListener('click', openDeckBuilder);
+  $('#deck-dialog-close')?.addEventListener('click', closeDeckBuilder);
+  $('#deck-reset-button')?.addEventListener('click', () => {
+    currentCustomDeck = [...DEFAULT_DECK];
+    saveDeckToStorage();
+    renderDeckBuilder();
+    showToast('기본 덱으로 복원되었습니다.');
+  });
+  $('#deck-save-button')?.addEventListener('click', () => {
+    if (currentCustomDeck.length < 10) {
+      showToast('덱은 최소 10장 이상이어야 합니다.', 'error');
+      return;
+    }
+    const hasMob = currentCustomDeck.some((id) => definition(id)?.type === 'mob' && id !== 'nature-disaster');
+    if (!hasMob) {
+      showToast('덱에 시작 몹 카드가 최소 1장 이상 있어야 합니다.', 'error');
+      return;
+    }
+    saveDeckToStorage();
+    closeDeckBuilder();
+    showToast('덱 편성이 저장되었습니다.');
+  });
+  deckDialog?.addEventListener('click', (event) => {
+    if (event.target === deckDialog) closeDeckBuilder();
+    const addCardEl = event.target.closest('[data-add-card]');
+    if (addCardEl) {
+      addCardToDeck(addCardEl.dataset.addCard);
+      return;
+    }
+    const removeCardEl = event.target.closest('[data-remove-card]');
+    if (removeCardEl) {
+      removeCardFromDeck(removeCardEl.dataset.removeCard);
+      return;
+    }
+  });
+
   $('#create-button').addEventListener('click', createRoom);
   $('#join-button').addEventListener('click', joinRoom);
-  $('#lobby-form').addEventListener('submit', (event) => { event.preventDefault(); joinRoom(); });
+  $('#lobby-form')?.addEventListener('submit', (event) => { event.preventDefault(); openPlayModal(); });
   roomInput.addEventListener('input', () => { roomInput.value = roomInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5); });
   $('#room-code-button').addEventListener('click', copyRoomCode);
   $('#draw-button').addEventListener('click', () => doAction({ type: 'draw' }));

@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
@@ -10,6 +11,7 @@ const RULES = require('./data/rules.json');
 const cards = new Map(CARD_DATA.cards.map((card) => [card.id, card]));
 const rooms = new Map();
 let nextInstanceNumber = 1;
+const matchmakingQueue = [];
 
 const app = express();
 const server = http.createServer(app);
@@ -19,7 +21,19 @@ const io = new Server(server, {
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/data', express.static(path.join(__dirname, 'data')));
-app.get('/healthz', (_req, res) => res.status(200).json({ ok: true, rooms: rooms.size }));
+app.use('/image', express.static(path.join(__dirname, 'image')));
+
+app.get('/image.png', (_req, res) => {
+  const customBg = path.join(__dirname, 'image.png');
+  const innerCustom = path.join(__dirname, 'image', 'image.png');
+  const bgPng = path.join(__dirname, 'image', 'background.png');
+  if (fs.existsSync(customBg)) return res.sendFile(customBg);
+  if (fs.existsSync(innerCustom)) return res.sendFile(innerCustom);
+  if (fs.existsSync(bgPng)) return res.sendFile(bgPng);
+  res.status(404).send('Background image not found');
+});
+
+app.get('/healthz', (_req, res) => res.status(200).json({ ok: true, rooms: rooms.size, queue: matchmakingQueue.length }));
 
 function makeId(prefix = 'c') {
   return `${prefix}_${nextInstanceNumber++}_${crypto.randomBytes(3).toString('hex')}`;
@@ -40,7 +54,7 @@ function cleanName(value) {
   return name;
 }
 
-function newPlayer({ id, name, socketId, seat }) {
+function newPlayer({ id, name, socketId, seat, customDeck }) {
   return {
     id,
     name,
@@ -48,6 +62,7 @@ function newPlayer({ id, name, socketId, seat }) {
     connected: true,
     seat,
     deck: [],
+    customDeck: Array.isArray(customDeck) ? customDeck : null,
     hand: [],
     board: [],
     trash: [],
@@ -85,7 +100,31 @@ function createCard(cardId) {
   };
 }
 
-function buildDeck() {
+function buildDeck(customCardIds) {
+  if (Array.isArray(customCardIds) && customCardIds.length >= 10) {
+    const validCards = customCardIds
+      .filter((id) => cards.has(id) && !cards.get(id).hidden)
+      .slice(0, 50);
+    // 자연재해 카드는 최대 1장 제한
+    let hasDisaster = false;
+    const filtered = [];
+    for (const id of validCards) {
+      if (id === 'nature-disaster') {
+        if (!hasDisaster) {
+          filtered.push(id);
+          hasDisaster = true;
+        }
+      } else {
+        filtered.push(id);
+      }
+    }
+    // 시작 몹으로 쓰일 수 있는 일반 몹 카드가 최소 1장 이상 있어야 함
+    const mobCandidates = filtered.filter((id) => cards.get(id).type === 'mob' && id !== 'nature-disaster');
+    if (mobCandidates.length > 0 && filtered.length >= 10) {
+      return shuffle(filtered.map(createCard));
+    }
+  }
+
   const mobs = [
     'jeonjangyeon', 'face-fish', 'snorlax', 'mecha', 'hair', 'jongchu', 'biker',
     'saurus', 'jongbaragi', 'knight', 'running-man', 'taekwondo', 'menhera', 'nature-disaster'
@@ -230,7 +269,7 @@ function startGame(room) {
   room.healingForbidden = false;
   room.healingSourceUid = null;
   room.players.forEach((player) => {
-    player.deck = buildDeck();
+    player.deck = buildDeck(player.customDeck);
     player.hand = [];
     player.board = [];
     player.trash = [];
@@ -798,13 +837,83 @@ function joinSocketToRoom(socket, room, player) {
   player.connected = true;
 }
 
+function removeFromQueue(socketId) {
+  const index = matchmakingQueue.findIndex((entry) => entry.socket.id === socketId);
+  if (index !== -1) {
+    matchmakingQueue.splice(index, 1);
+    return true;
+  }
+  return false;
+}
+
+function tryMatchmaking() {
+  while (matchmakingQueue.length >= 2) {
+    const entry1 = matchmakingQueue.shift();
+    const entry2 = matchmakingQueue.shift();
+
+    if (!entry1.socket.connected) {
+      if (entry2.socket.connected) matchmakingQueue.unshift(entry2);
+      continue;
+    }
+    if (!entry2.socket.connected) {
+      matchmakingQueue.unshift(entry1);
+      continue;
+    }
+
+    const code = makeRoomCode();
+    const player1 = newPlayer({
+      id: entry1.playerId,
+      name: entry1.name,
+      socketId: entry1.socket.id,
+      seat: 0,
+      customDeck: entry1.customDeck
+    });
+    const player2 = newPlayer({
+      id: entry2.playerId,
+      name: entry2.name,
+      socketId: entry2.socket.id,
+      seat: 1,
+      customDeck: entry2.customDeck
+    });
+
+    const room = {
+      code,
+      players: [player1, player2],
+      status: 'lobby',
+      activeSeat: 0,
+      turnNumber: 0,
+      logs: [],
+      winner: null
+    };
+    rooms.set(code, room);
+
+    joinSocketToRoom(entry1.socket, room, player1);
+    joinSocketToRoom(entry2.socket, room, player2);
+
+    log(room, `${player1.name} 님과 ${player2.name} 님이 매칭되었습니다!`, 'system');
+
+    entry1.socket.emit('matchFound', { ok: true, code, playerId: player1.id });
+    entry2.socket.emit('matchFound', { ok: true, code, playerId: player2.id });
+
+    startGame(room);
+    emitState(room);
+  }
+}
+
 io.on('connection', (socket) => {
   socket.on('createRoom', (data, callback = () => {}) => {
     try {
+      removeFromQueue(socket.id);
       const name = cleanName(data?.name);
       const playerId = typeof data?.playerId === 'string' && data.playerId.length >= 8 ? data.playerId : makeId('p');
       const code = makeRoomCode();
-      const player = newPlayer({ id: playerId, name, socketId: socket.id, seat: 0 });
+      const player = newPlayer({
+        id: playerId,
+        name,
+        socketId: socket.id,
+        seat: 0,
+        customDeck: data?.customDeck
+      });
       const room = { code, players: [player], status: 'lobby', activeSeat: 0, turnNumber: 0, logs: [], winner: null };
       rooms.set(code, room);
       joinSocketToRoom(socket, room, player);
@@ -818,18 +927,26 @@ io.on('connection', (socket) => {
 
   socket.on('joinRoom', (data, callback = () => {}) => {
     try {
+      removeFromQueue(socket.id);
       const code = String(data?.code || '').trim().toUpperCase();
       const room = rooms.get(code);
       if (!room) throw new Error('존재하지 않거나 만료된 방 코드입니다.');
       const playerId = typeof data?.playerId === 'string' ? data.playerId : '';
       let player = room.players.find((entry) => entry.id === playerId);
       if (player) {
+        if (Array.isArray(data?.customDeck)) player.customDeck = data.customDeck;
         joinSocketToRoom(socket, room, player);
         log(room, `${player.name} 님이 다시 연결되었습니다.`, 'system');
       } else {
         if (room.status !== 'lobby' || room.players.length >= 2) throw new Error('이 방은 이미 가득 찼습니다.');
         const name = cleanName(data?.name);
-        player = newPlayer({ id: playerId.length >= 8 ? playerId : makeId('p'), name, socketId: socket.id, seat: room.players.length });
+        player = newPlayer({
+          id: playerId.length >= 8 ? playerId : makeId('p'),
+          name,
+          socketId: socket.id,
+          seat: room.players.length,
+          customDeck: data?.customDeck
+        });
         room.players.push(player);
         joinSocketToRoom(socket, room, player);
         log(room, `${name} 님이 방에 입장했습니다.`, 'system');
@@ -842,6 +959,29 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('startMatchmaking', (data, callback = () => {}) => {
+    try {
+      const name = cleanName(data?.name);
+      const playerId = typeof data?.playerId === 'string' && data.playerId.length >= 8 ? data.playerId : makeId('p');
+      removeFromQueue(socket.id);
+      matchmakingQueue.push({
+        socket,
+        playerId,
+        name,
+        customDeck: data?.customDeck
+      });
+      callback({ ok: true, message: '상대를 찾는 중입니다...' });
+      tryMatchmaking();
+    } catch (error) {
+      callback({ ok: false, message: error.message });
+    }
+  });
+
+  socket.on('cancelMatchmaking', (_data, callback = () => {}) => {
+    removeFromQueue(socket.id);
+    callback({ ok: true });
+  });
+
   socket.on('gameAction', (payload, callback = () => {}) => {
     try {
       performAction(socket, payload);
@@ -852,6 +992,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    removeFromQueue(socket.id);
     const found = playerForSocket(socket);
     if (!found) return;
     const { room, player } = found;

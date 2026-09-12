@@ -15,24 +15,35 @@
         <div class="brand-mark" aria-hidden="true">고</div>
         <p class="eyebrow">REAL-TIME TACTICAL CARD BATTLE</p>
         <h1>고아 <em>카드 게임</em></h1>
-        <p class="lobby-copy">카드를 내고, 효과를 읽고, 방 코드를 공유해 대전하세요.</p>
+        <p class="lobby-copy">카드를 내고, 효과를 읽고, 나만의 덱으로 승리하세요.</p>
 
-        <form id="lobby-form" class="lobby-card">
-          <label>
-            <span>닉네임</span>
-            <input id="name-input" name="name" minlength="2" maxlength="16" placeholder="2~16자" required autocomplete="nickname" />
-          </label>
-          <div class="lobby-actions">
-            <button id="create-button" class="button primary" type="button">새 대전 만들기</button>
-            <span class="or">또는</span>
-            <label class="room-input">
-              <span class="sr-only">방 코드</span>
-              <input id="room-input" name="room" maxlength="5" placeholder="방 코드" autocomplete="off" />
+        <div id="lobby-form" class="lobby-card main-hub">
+          <div class="hub-section nickname-section">
+            <label for="name-input">
+              <span class="hub-label">닉네임 설정</span>
+              <input id="name-input" name="name" minlength="2" maxlength="16" placeholder="닉네임 입력 (2~16자)" required autocomplete="nickname" />
             </label>
-            <button id="join-button" class="button secondary" type="button">입장</button>
+            <span class="input-hint">설정한 닉네임은 자동으로 저장됩니다.</span>
           </div>
-          <p id="lobby-message" class="form-message">친구에게 방 코드를 보내 두 번째 플레이어를 기다리세요.</p>
-        </form>
+
+          <div class="hub-section deck-section">
+            <div class="deck-summary">
+              <span class="hub-label">덱 편성</span>
+              <span id="deck-status-badge" class="deck-count-badge">덱 확인 중...</span>
+            </div>
+            <button id="open-deck-builder-button" class="button secondary deck-edit-btn" type="button">
+              <span>🃏</span> 덱 편성 / 카드 확인
+            </button>
+          </div>
+
+          <div class="hub-section play-section">
+            <button id="open-play-button" class="button primary play-main-btn" type="button">
+              <span>⚔</span> 플레이
+            </button>
+          </div>
+
+          <p id="lobby-message" class="form-message"></p>
+        </div>
 
         <div class="rule-glance">
           <span>2인 실시간</span><span>필드 최대 3장</span><span>턴당 1회 드로우</span><span>서버 동기화</span>
@@ -127,6 +138,82 @@
     <dialog id="modal" class="modal">
       <button id="modal-close" class="modal-close" type="button" aria-label="닫기">×</button>
       <div id="modal-content"></div>
+    </dialog>
+
+    <!-- 플레이 모드 선택 모달 -->
+    <dialog id="play-dialog" class="modal play-dialog">
+      <button id="play-dialog-close" class="modal-close" type="button" aria-label="닫기">×</button>
+      <div class="modal-inner">
+        <h2>대전 플레이</h2>
+        <p class="modal-desc">원하는 플레이 방식을 선택하세요.</p>
+
+        <div class="play-modes-grid">
+          <!-- 1. 빠른 매치메이킹 -->
+          <div class="play-card matchmaking-box">
+            <div class="mode-icon">⚡</div>
+            <h3>빠른 매치메이킹</h3>
+            <p>접속 중인 다른 유저와 즉시 매칭되어 대전합니다.</p>
+            <div id="matchmaking-active-area" class="matchmaking-active-area hidden">
+              <div class="spinner"></div>
+              <p id="matchmaking-status-text">상대를 찾는 중입니다...</p>
+              <button id="cancel-matchmaking-button" class="button secondary small" type="button">매칭 취소</button>
+            </div>
+            <button id="start-matchmaking-button" class="button primary mode-btn" type="button">매치메이킹 시작</button>
+          </div>
+
+          <!-- 2. 방 코드 생성 및 코드 참가 -->
+          <div class="play-card custom-room-box">
+            <div class="mode-icon">🔑</div>
+            <h3>방 코드로 플레이</h3>
+            <p>방 코드를 생성해 친구를 초대하거나 코드를 입력해 참가합니다.</p>
+            <div class="custom-room-actions">
+              <button id="create-button" class="button secondary mode-btn" type="button">새 방 코드 생성</button>
+              <div class="room-join-group">
+                <input id="room-input" name="room" maxlength="5" placeholder="방 코드 5자리" autocomplete="off" />
+                <button id="join-button" class="button secondary" type="button">입장</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- 덱 편성 모달 -->
+    <dialog id="deck-dialog" class="modal deck-dialog">
+      <button id="deck-dialog-close" class="modal-close" type="button" aria-label="닫기">×</button>
+      <div class="deck-modal-inner">
+        <header class="deck-modal-header">
+          <div>
+            <h2>덱 편성</h2>
+            <p class="modal-desc">원하는 카드를 선택해 나만의 덱을 만드세요. 변경 사항은 사이트를 나갔다 와도 유지됩니다.</p>
+          </div>
+          <div class="deck-header-actions">
+            <span id="deck-count-indicator" class="deck-count-badge">총 <b>0</b>장</span>
+            <button id="deck-reset-button" class="button secondary small" type="button">기본 덱 복원</button>
+            <button id="deck-save-button" class="button primary small" type="button">덱 저장 완료</button>
+          </div>
+        </header>
+
+        <div class="deck-panels-split">
+          <!-- 내 덱 -->
+          <section class="deck-current-section">
+            <div class="section-title-bar">
+              <strong>현재 덱 목록 (<span id="deck-current-count">0</span>)</strong>
+              <small>카드를 클릭하면 덱에서 제거됩니다.</small>
+            </div>
+            <div id="current-deck-grid" class="deck-grid deck-current-grid"></div>
+          </section>
+
+          <!-- 전체 카드 보관함 -->
+          <section class="deck-catalog-section">
+            <div class="section-title-bar">
+              <strong>카드 도감 (추가 가능)</strong>
+              <small>카드를 클릭하면 덱에 추가됩니다. (자연재해는 1장 제한)</small>
+            </div>
+            <div id="catalog-card-grid" class="deck-grid deck-catalog-grid"></div>
+          </section>
+        </div>
+      </div>
     </dialog>
 
     <script src="/socket.io/socket.io.js"></script>
