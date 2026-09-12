@@ -1,0 +1,313 @@
+{
+  "version": 1,
+  "gameName": "고아 카드 게임",
+  "cards": [
+    {
+      "id": "jeonjangyeon",
+      "type": "mob",
+      "name": "전장연",
+      "hp": 200,
+      "visual": { "accent": "gold", "icon": "♛", "vfx": "royal" },
+      "skills": [
+        { "id": "tyrant", "name": "성군인가? 폭군인가?", "text": "적 1명에게 40 피해", "target": "enemy", "effect": "damage", "amount": 40 },
+        { "id": "love-respect", "name": "학교를 왜 다니나? 사랑과 존중을 받기 위해서야", "text": "자신의 HP를 40 회복", "target": "self", "effect": "heal", "amount": 40 }
+      ]
+    },
+    {
+      "id": "face-fish",
+      "type": "mob",
+      "name": "인면어 전장연",
+      "hp": 50,
+      "visual": { "accent": "cyan", "icon": "◒", "vfx": "splash" },
+      "passive": { "id": "evasion", "name": "회피", "text": "공격 스킬의 대상이 될 때 동전 앞면이면 그 공격을 무효화" },
+      "skills": [
+        { "id": "flop", "name": "파닥거리기", "text": "적 1명에게 10 피해", "target": "enemy", "effect": "damage", "amount": 10 },
+        { "id": "evasion", "name": "회피", "text": "공격 스킬 대상이 될 때 동전 앞면이면 무효", "target": "none", "effect": "passive" }
+      ],
+      "evolvesTo": "gyarados"
+    },
+    {
+      "id": "gyarados",
+      "type": "mob",
+      "name": "갸라도스 전장연",
+      "hp": 400,
+      "hidden": true,
+      "evolutionOf": "face-fish",
+      "visual": { "accent": "blue", "icon": "♒", "vfx": "tidal" },
+      "skills": [
+        { "id": "tidal-wave", "name": "파도 일으키기", "text": "상대 필드의 모든 몹에게 50 피해", "target": "all-enemies", "effect": "damage-all", "amount": 50 },
+        { "id": "hydro-pump", "name": "하이드로펌프", "text": "적 1명에게 200 피해", "target": "enemy", "effect": "damage", "amount": 200 }
+      ]
+    },
+    {
+      "id": "snorlax",
+      "type": "mob",
+      "name": "잠만보 전장연",
+      "hp": 240,
+      "visual": { "accent": "violet", "icon": "☾", "vfx": "sleep" },
+      "skills": [
+        { "id": "press", "name": "누르기", "text": "적 1명에게 60 피해", "target": "enemy", "effect": "damage", "amount": 60 },
+        { "id": "yawn", "name": "하품", "text": "적 1명을 잠듦 상태로 만듦", "target": "enemy", "effect": "sleep" }
+      ]
+    },
+    {
+      "id": "mecha",
+      "type": "mob",
+      "name": "메카 전장연",
+      "hp": 200,
+      "visual": { "accent": "steel", "icon": "⚙", "vfx": "electric" },
+      "passive": { "id": "cheap-battery", "name": "중국산 베터리", "text": "과충전 1스택당 받는 피해가 10 증가" },
+      "skills": [
+        { "id": "charge", "name": "충전하기", "text": "자신에게 과충전 1스택 부여", "target": "self", "effect": "overcharge", "amount": 1 },
+        { "id": "discharge", "name": "방전", "text": "80 + 자신의 과충전 스택×40 피해", "target": "enemy", "effect": "discharge", "amount": 80 }
+      ]
+    },
+    {
+      "id": "hair",
+      "type": "mob",
+      "name": "머리 흘러내린 전장연",
+      "hp": 300,
+      "visual": { "accent": "rose", "icon": "〰", "vfx": "hair" },
+      "passive": { "id": "falling-hair", "name": "흘러내린 머리카락", "text": "양옆 아군이 받는 피해의 절반을 대신 받음" },
+      "skills": [
+        { "id": "confuse-coin", "name": "넌 탈모 안걸릴거 같지?", "text": "동전 앞면이면 적 1명을 혼란으로 만듦", "target": "enemy", "effect": "coin-confuse" },
+        { "id": "lift-hair", "name": "머리 다시 올리기", "text": "적 1명에게 40 피해", "target": "enemy", "effect": "damage", "amount": 40 }
+      ]
+    },
+    {
+      "id": "jongchu",
+      "type": "mob",
+      "name": "종연츄",
+      "hp": 140,
+      "visual": { "accent": "yellow", "icon": "⚡", "vfx": "electric" },
+      "passive": { "id": "electric-mouse", "name": "전기쥐", "text": "매 턴 자신과 양옆 아군에게 과충전 1스택 부여" },
+      "skills": [
+        { "id": "electric-field", "name": "일렉트로필드", "text": "내 필드에 전기장 설치", "target": "self", "effect": "set-electric-field" },
+        { "id": "million-volts", "name": "백만볼트", "text": "60 + 아군 과충전 총스택×20 피해 (전기장 시 추가 피해 2배)", "target": "enemy", "effect": "million-volts", "amount": 60 }
+      ]
+    },
+    {
+      "id": "biker",
+      "type": "mob",
+      "name": "폭주족 전장연",
+      "hp": 220,
+      "visual": { "accent": "orange", "icon": "🏍", "vfx": "fire" },
+      "passive": { "id": "best-driver", "name": "베스트 드라이버", "text": "매 턴 자신에게 과열된 연료 1스택 부여" },
+      "skills": [
+        { "id": "start-engine", "name": "시동 걸기", "text": "30 피해, 주는 피해 +40(누적), 연료×15 회복(최대 150)", "target": "enemy", "effect": "start-engine", "amount": 30 },
+        { "id": "go-wild", "name": "폭주한판", "text": "60 + 과열된 연료×20 피해", "target": "enemy", "effect": "go-wild", "amount": 60 }
+      ]
+    },
+    {
+      "id": "saurus",
+      "type": "mob",
+      "name": "전장연 사우루스",
+      "hp": 400,
+      "visual": { "accent": "green", "icon": "♜", "vfx": "roar" },
+      "skills": [
+        { "id": "roar", "name": "포효", "text": "20 피해, 대상의 다음 공격 피해를 절반으로", "target": "enemy", "effect": "roar", "amount": 20 },
+        { "id": "bite", "name": "물기", "text": "적 1명에게 100 피해", "target": "enemy", "effect": "damage", "amount": 100 }
+      ]
+    },
+    {
+      "id": "jongbaragi",
+      "type": "mob",
+      "name": "종바라기",
+      "hp": 100,
+      "visual": { "accent": "lime", "icon": "☀", "vfx": "solar" },
+      "passive": { "id": "photosynthesis", "name": "광합성", "text": "매 턴 HP 50 회복, 회복량과 최대 체력 +10" },
+      "skills": [
+        { "id": "stem-hit", "name": "줄기로 때리기", "text": "적 1명에게 30 피해", "target": "enemy", "effect": "damage", "amount": 30 },
+        { "id": "solar-prep", "name": "솔라빔 준비", "text": "2턴 동안 스킬 불가, 이후 HP가 가장 낮은 적에게 300 피해", "target": "self", "effect": "solar-prep" }
+      ]
+    },
+    {
+      "id": "knight",
+      "type": "mob",
+      "name": "기사 전장연",
+      "hp": 230,
+      "visual": { "accent": "silver", "icon": "⚔", "vfx": "slash" },
+      "passive": { "id": "chivalry", "name": "기사도 정신", "text": "내 필드에 몹이 1장일 때 주는 피해 2배, 받는 피해 절반" },
+      "skills": [
+        { "id": "slash", "name": "칼로 배기", "text": "적 1명에게 60 피해", "target": "enemy", "effect": "damage", "amount": 60 }
+      ]
+    },
+    {
+      "id": "awakened",
+      "type": "mob",
+      "name": "각성 리즈시절 전장연",
+      "hp": 523,
+      "hidden": true,
+      "evolutionOf": "jeonjangyeon",
+      "visual": { "accent": "prism", "icon": "✦", "vfx": "awakening" },
+      "passive": { "id": "acting", "name": "연기력", "text": "주는 피해의 30%만큼 회복" },
+      "skills": [
+        { "id": "three-powers", "name": "세 가지 힘이 느껴지나?", "text": "상대 필드 모든 몹에게 60 피해", "target": "all-enemies", "effect": "damage-all", "amount": 60 },
+        { "id": "bu-gwang", "name": "내가 시발 부광고의 전장연이다!!!", "text": "적 1명에게 180 피해", "target": "enemy", "effect": "damage", "amount": 180 }
+      ]
+    },
+    {
+      "id": "nature-disaster",
+      "type": "mob",
+      "name": "자연재해??",
+      "hp": 523,
+      "special": true,
+      "restrictedCopies": 1,
+      "visual": { "accent": "crimson", "icon": "☄", "vfx": "disaster" },
+      "passive": { "id": "devour", "name": "포식", "text": "내 필드 몹 1장을 포식해 트레쉬로 보내고 HP 100 회복" },
+      "skills": [
+        { "id": "baldness", "name": "대머리가 온다", "text": "적 1명에게 200 피해", "target": "enemy", "effect": "damage", "amount": 200 },
+        { "id": "run-away", "name": "시발 도망쳐!", "text": "양 필드 모든 몹에게 50 피해, 이 카드 외 회복 불가", "target": "all", "effect": "run-away", "amount": 50 }
+      ]
+    },
+    {
+      "id": "running-man",
+      "type": "mob",
+      "name": "런닝맨 전장연",
+      "hp": 230,
+      "visual": { "accent": "coral", "icon": "➟", "vfx": "speed" },
+      "passive": { "id": "keep-running", "name": "난 걷지 않고 뛰어", "text": "같은 스킬을 연속 사용하면 피해 +20" },
+      "skills": [
+        { "id": "shovel", "name": "내가 군인 시절 삽질 장인이었어!", "text": "20 피해, 직전 턴 같은 스킬이면 +40", "target": "enemy", "effect": "running-damage", "amount": 20 },
+        { "id": "tired", "name": "늙어서 힘들어....", "text": "자신 HP 50 회복, 직전 턴 같은 스킬이면 +40", "target": "self", "effect": "running-heal", "amount": 50 }
+      ]
+    },
+    {
+      "id": "taekwondo",
+      "type": "mob",
+      "name": "태권도 수련생 전장연",
+      "hp": 300,
+      "visual": { "accent": "teal", "icon": "☯", "vfx": "kick" },
+      "passive": { "id": "yellow-belt", "name": "나 태권도 노란띠야!", "text": "받는 피해 50% 감소" },
+      "skills": [
+        { "id": "punch", "name": "정권지르기", "text": "적 1명에게 30 피해", "target": "enemy", "effect": "damage", "amount": 30 },
+        { "id": "round-kick", "name": "뒤돌려차기", "text": "적 1명에게 80 피해. 동전 뒷면이면 자신 혼란", "target": "enemy", "effect": "round-kick", "amount": 80 }
+      ]
+    },
+    {
+      "id": "menhera",
+      "type": "mob",
+      "name": "멘헤라 전장연",
+      "hp": 200,
+      "visual": { "accent": "pink", "icon": "♥", "vfx": "heart" },
+      "passive": { "id": "study-time", "name": "아침 시간에 자습하자니까~~", "text": "같은 상대를 공격할 때 입힌 피해의 30% 회복" },
+      "skills": [
+        { "id": "pretend-close", "name": "친한척 하기", "text": "50 피해, 피해를 입은 대상의 다음 주는 피해 -50%", "target": "enemy", "effect": "pretend-close", "amount": 50 }
+      ]
+    },
+    {
+      "id": "patience",
+      "type": "attachment",
+      "name": "인내력",
+      "visual": { "accent": "blue", "icon": "◈", "vfx": "shield" },
+      "text": "부착한 몹의 받는 피해 -15",
+      "effect": "attach-patience"
+    },
+    {
+      "id": "learning",
+      "type": "attachment",
+      "name": "학습력",
+      "visual": { "accent": "gold", "icon": "✎", "vfx": "spark" },
+      "text": "부착한 몹의 주는 피해 +10",
+      "effect": "attach-learning"
+    },
+    {
+      "id": "sociability",
+      "type": "attachment",
+      "name": "사회 친화력",
+      "visual": { "accent": "green", "icon": "✿", "vfx": "heal" },
+      "text": "부착한 몹의 매 턴 HP 10 회복",
+      "effect": "attach-sociability"
+    },
+    {
+      "id": "draw-one-mob",
+      "type": "consumable",
+      "name": "뽑아",
+      "visual": { "accent": "cyan", "icon": "↯", "vfx": "draw" },
+      "text": "덱에서 몹 카드 1장을 무작위로 드로우",
+      "target": "none",
+      "effect": "draw-random-mob"
+    },
+    {
+      "id": "bag",
+      "type": "consumable",
+      "name": "책가방",
+      "visual": { "accent": "brown", "icon": "▣", "vfx": "draw" },
+      "text": "덱에서 무작위 카드 2장을 드로우",
+      "target": "none",
+      "effect": "draw-two"
+    },
+    {
+      "id": "no-ai",
+      "type": "consumable",
+      "name": "생성형 ai 사용 금지!",
+      "visual": { "accent": "red", "icon": "⊘", "vfx": "shatter" },
+      "text": "상대 몹 1장의 부착 아이템을 모두 트레쉬로 보냄",
+      "target": "enemy",
+      "effect": "remove-attachments"
+    },
+    {
+      "id": "cleanse",
+      "type": "consumable",
+      "name": "야 이 시발",
+      "visual": { "accent": "white", "icon": "✧", "vfx": "cleanse" },
+      "text": "내 몹 1장의 모든 상태 이상 해제",
+      "target": "ally",
+      "effect": "cleanse"
+    },
+    {
+      "id": "positive-negative",
+      "type": "consumable",
+      "name": "positive negative",
+      "visual": { "accent": "violet", "icon": "±", "vfx": "coin" },
+      "text": "내/상대 몹 1장에 동전: 앞면 HP 100 회복, 뒷면 100 피해",
+      "target": "any",
+      "effect": "positive-negative"
+    },
+    {
+      "id": "return-class",
+      "type": "consumable",
+      "name": "4조 c 나와 ~",
+      "visual": { "accent": "orange", "icon": "↩", "vfx": "return" },
+      "text": "내 필드의 몹 1장을 패로 되돌림",
+      "target": "ally",
+      "effect": "return-to-hand"
+    },
+    {
+      "id": "eraser",
+      "type": "consumable",
+      "name": "이 칠판 지우개를 봐",
+      "visual": { "accent": "gray", "icon": "▰", "vfx": "target" },
+      "text": "내 몹 1장을 상대 다음 공격의 강제 대상으로 지정",
+      "target": "ally",
+      "effect": "force-target"
+    },
+    {
+      "id": "hyperfocus",
+      "type": "consumable",
+      "name": "하이퍼포커스",
+      "visual": { "accent": "indigo", "icon": "◉", "vfx": "focus" },
+      "text": "내 몹 1장이 다음에 받는 피해를 절반으로",
+      "target": "ally",
+      "effect": "hyperfocus"
+    },
+    {
+      "id": "pop-quiz",
+      "type": "consumable",
+      "name": "기습 수행평가",
+      "visual": { "accent": "purple", "icon": "!", "vfx": "confuse" },
+      "text": "상대 필드의 모든 몹에게 혼란 부여",
+      "target": "none",
+      "effect": "confuse-all"
+    },
+    {
+      "id": "ahe",
+      "type": "consumable",
+      "name": "아헤장연",
+      "visual": { "accent": "black", "icon": "?", "vfx": "shrug" },
+      "text": "효과 없음. 그냥 기분이 좋지 않습니다.",
+      "target": "none",
+      "effect": "nothing"
+    }
+  ]
+}

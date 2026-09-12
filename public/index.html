@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#071b21" />
+    <title>고아 카드 게임</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <main id="app" aria-live="polite">
+      <section id="lobby-screen" class="lobby-screen">
+        <div class="brand-mark" aria-hidden="true">고</div>
+        <p class="eyebrow">REAL-TIME TACTICAL CARD BATTLE</p>
+        <h1>고아 <em>카드 게임</em></h1>
+        <p class="lobby-copy">카드를 내고, 효과를 읽고, 방 코드를 공유해 대전하세요.</p>
+
+        <form id="lobby-form" class="lobby-card">
+          <label>
+            <span>닉네임</span>
+            <input id="name-input" name="name" minlength="2" maxlength="16" placeholder="2~16자" required autocomplete="nickname" />
+          </label>
+          <div class="lobby-actions">
+            <button id="create-button" class="button primary" type="button">새 대전 만들기</button>
+            <span class="or">또는</span>
+            <label class="room-input">
+              <span class="sr-only">방 코드</span>
+              <input id="room-input" name="room" maxlength="5" placeholder="방 코드" autocomplete="off" />
+            </label>
+            <button id="join-button" class="button secondary" type="button">입장</button>
+          </div>
+          <p id="lobby-message" class="form-message">친구에게 방 코드를 보내 두 번째 플레이어를 기다리세요.</p>
+        </form>
+
+        <div class="rule-glance">
+          <span>2인 실시간</span><span>필드 최대 3장</span><span>턴당 1회 드로우</span><span>서버 동기화</span>
+        </div>
+      </section>
+
+      <section id="game-screen" class="game-screen hidden">
+        <header class="game-header">
+          <button id="logo-button" class="mini-brand" type="button" title="게임 정보 보기"><span>고</span> 카드 게임</button>
+          <div id="turn-announcement" class="turn-announcement">대전을 준비 중입니다</div>
+          <div class="header-actions">
+            <button id="room-code-button" class="room-code" type="button" title="방 코드 복사">ROOM <strong id="room-code">-----</strong><small>복사</small></button>
+            <span id="connection-state" class="connection-state"><i></i> 연결 중</span>
+          </div>
+        </header>
+
+        <div class="game-layout">
+          <aside class="left-rail rail">
+            <section class="pile-panel">
+              <button id="opponent-trash-button" class="pile-button trash-pile" type="button">
+                <span class="pile-card">♲</span><span>상대 트레쉬</span><b id="opponent-trash-count">0</b>
+              </button>
+              <button id="opponent-deck-button" class="pile-button deck-pile" type="button">
+                <span class="pile-card">✦</span><span>상대 덱</span><b id="opponent-deck-count">0</b>
+              </button>
+            </section>
+            <section class="help-card">
+              <p class="eyebrow">HOW TO PLAY</p>
+              <p>카드를 선택한 뒤 빛나는 대상 또는 빈 필드를 클릭하세요. 손패의 몹은 드래그해서 배치할 수도 있습니다.</p>
+              <button id="rules-button" class="text-button" type="button">기본 규칙 보기 →</button>
+            </section>
+          </aside>
+
+          <section class="battlefield" aria-label="대전 필드">
+            <section class="player-zone opponent-zone">
+              <div class="player-bar">
+                <div class="avatar opponent-avatar">?</div>
+                <div class="player-name-line"><strong id="opponent-name">상대를 기다리는 중</strong><span id="opponent-connection" class="presence">대기</span></div>
+                <div id="opponent-field-effect" class="field-effect"></div>
+                <button id="opponent-hand-button" class="opponent-hand" type="button" title="상대 손패는 비공개입니다"><span>▨</span><b id="opponent-hand-count">0</b>장</button>
+              </div>
+              <div id="opponent-board" class="board opponent-board" aria-label="상대 필드"></div>
+            </section>
+
+            <div class="battle-divider"><span>VS</span><i></i><span id="turn-count">TURN 0</span><i></i></div>
+
+            <section class="player-zone my-zone">
+              <div id="my-board" class="board my-board" aria-label="내 필드"></div>
+              <div class="player-bar my-player-bar">
+                <div class="avatar my-avatar">나</div>
+                <div class="player-name-line"><strong id="my-name">플레이어</strong><span id="my-connection" class="presence">연결</span></div>
+                <div id="my-field-effect" class="field-effect"></div>
+                <span class="hand-count">손패 <b id="my-hand-count">0</b></span>
+              </div>
+            </section>
+
+            <section class="hand-zone">
+              <div class="hand-header"><span>내 패</span><small id="selection-hint">카드를 선택하세요.</small></div>
+              <div id="my-hand" class="my-hand" aria-label="내 손패"></div>
+            </section>
+          </section>
+
+          <aside class="right-rail rail">
+            <section id="inspector" class="inspector" aria-label="카드 상세">
+              <div class="inspector-empty">
+                <span class="inspect-icon">⌁</span>
+                <strong>카드 상세</strong>
+                <p>카드 또는 필드를 클릭하면 능력과 행동을 볼 수 있습니다.</p>
+              </div>
+            </section>
+            <section class="action-panel">
+              <button id="draw-button" class="button draw-button" type="button"><span>✦</span> 드로우 <small>턴당 1회</small></button>
+              <button id="end-turn-button" class="button end-turn-button" type="button">턴 종료 <span>→</span></button>
+              <button id="cancel-button" class="text-button cancel-button" type="button">선택 취소</button>
+            </section>
+            <section class="log-panel">
+              <div class="panel-title"><span>전투 기록</span><small>LIVE</small></div>
+              <div id="game-log" class="game-log"></div>
+            </section>
+            <section class="pile-panel own-piles">
+              <button id="my-deck-button" class="pile-button deck-pile" type="button"><span class="pile-card">✦</span><span>내 덱</span><b id="my-deck-count">0</b></button>
+              <button id="my-trash-button" class="pile-button trash-pile" type="button"><span class="pile-card">♲</span><span>내 트레쉬</span><b id="my-trash-count">0</b></button>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <div id="effect-layer" class="effect-layer" aria-live="assertive" aria-atomic="true"></div>
+    <div id="toast" class="toast" role="status"></div>
+
+    <dialog id="modal" class="modal">
+      <button id="modal-close" class="modal-close" type="button" aria-label="닫기">×</button>
+      <div id="modal-content"></div>
+    </dialog>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "maxBoardSize": 3,
+  "startingHandSize": 4,
+  "startingBoardMobs": 1,
+  "drawsPerTurn": 1,
+  "skillsPerMobPerTurn": 1,
+  "overchargeCap": 10,
+  "assumptions": {
+    "sleep": "잠듦은 다음 자신의 공격 스킬 1회를 취소하고 해제됩니다.",
+    "evolution": "인면어 전장연은 손에서 갸라도스 전장연으로 진화할 수 있으며, 전장연은 세 가지 부착 아이템이 갖춰지면 자동 각성합니다.",
+    "natureDisaster": "자연재해??는 덱에 1장만 포함되며, 포식은 필드의 다른 아군 몹을 선택해 사용합니다.",
+    "victory": "필드의 마지막 몹이 트레쉬로 이동하면 패배합니다. 게임 시작 몹은 자동 소환됩니다."
+  }
+}
