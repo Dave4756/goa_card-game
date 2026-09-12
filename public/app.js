@@ -26,12 +26,9 @@
   };
 
   const DEFAULT_DECK = [
-    'jeonjangyeon', 'face-fish', 'snorlax', 'mecha', 'hair', 'jongchu', 'biker',
-    'saurus', 'jongbaragi', 'knight', 'running-man', 'taekwondo', 'menhera', 'nature-disaster',
-    'patience', 'learning', 'sociability', 'patience', 'learning', 'sociability',
-    'draw-one-mob', 'bag', 'no-ai', 'cleanse', 'positive-negative', 'return-class',
-    'eraser', 'hyperfocus', 'pop-quiz', 'ahe', 'draw-one-mob', 'bag', 'no-ai',
-    'cleanse', 'positive-negative', 'return-class', 'eraser', 'hyperfocus', 'pop-quiz'
+    'jeonjangyeon', 'face-fish', 'gyarados', 'snorlax', 'mecha', 'jongchu', 'biker',
+    'patience', 'patience', 'learning', 'sociability', 'sociability',
+    'draw-one-mob', 'draw-one-mob', 'cleanse', 'cleanse', 'bag', 'bag', 'positive-negative', 'eraser'
   ];
 
   let definitions = new Map();
@@ -84,9 +81,22 @@
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length >= 10) {
-          currentCustomDeck = parsed;
-          updateDeckBadge();
-          return;
+          const counts = new Map();
+          const cleaned = [];
+          for (const id of parsed) {
+            const cnt = counts.get(id) || 0;
+            const maxAllowed = id === 'nature-disaster' ? 1 : 2;
+            if (cnt < maxAllowed && cleaned.length < 20) {
+              counts.set(id, cnt + 1);
+              cleaned.push(id);
+            }
+          }
+          if (cleaned.length >= 10) {
+            currentCustomDeck = cleaned;
+            saveDeckToStorage();
+            updateDeckBadge();
+            return;
+          }
         }
       }
     } catch (_e) {}
@@ -230,7 +240,7 @@
     const countIndicator = $('#deck-count-indicator');
     const currentCount = $('#deck-current-count');
 
-    if (countIndicator) countIndicator.innerHTML = `총 <b>${currentCustomDeck.length}</b>장 (최소 10장)`;
+    if (countIndicator) countIndicator.innerHTML = `총 <b>${currentCustomDeck.length}</b>장 (10~20장, 같은 카드 최대 2장)`;
     if (currentCount) currentCount.textContent = currentCustomDeck.length;
 
     const counts = new Map();
@@ -277,13 +287,15 @@
         : `<span>${escapeHtml(card.visual?.icon || '◆')}</span>`;
       const typeLabel = card.type === 'mob' ? '몹' : card.type === 'attachment' ? '부착' : '소모';
       const inDeckCount = counts.get(card.id) || 0;
+      const maxLimit = card.id === 'nature-disaster' ? 1 : 2;
+      const isMax = inDeckCount >= maxLimit;
 
       catalogHtml += `
-        <div class="builder-card" data-add-card="${escapeHtml(card.id)}" title="클릭하여 덱에 1장 추가">
-          ${inDeckCount > 0 ? `<span class="card-count-badge" style="background:#5ed4c0; color:#062327;">보유 ${inDeckCount}</span>` : ''}
+        <div class="builder-card" data-add-card="${escapeHtml(card.id)}" title="${isMax ? '최대 매수 도달' : '클릭하여 덱에 1장 추가'}">
+          ${inDeckCount > 0 ? `<span class="card-count-badge" style="background:${isMax ? '#ef7975' : '#5ed4c0'}; color:#062327;">보유 ${inDeckCount}/${maxLimit}</span>` : ''}
           <div class="builder-card-thumb" style="color:${cardColor(card)}">${thumb}</div>
           <div class="builder-card-name">${escapeHtml(card.name)}</div>
-          <div class="builder-card-type"><span>${typeLabel}</span><small style="color:#64dfc8">추가 +</small></div>
+          <div class="builder-card-type"><span>${typeLabel}</span><small style="color:${isMax ? '#ef7975' : '#64dfc8'}">${isMax ? '최대' : '추가 +'}</small></div>
         </div>
       `;
     });
@@ -294,14 +306,16 @@
   }
 
   function addCardToDeck(cardId) {
-    if (cardId === 'nature-disaster') {
-      if (currentCustomDeck.includes('nature-disaster')) {
-        showToast('자연재해?? 카드는 덱에 최대 1장만 포함할 수 있습니다.', 'error');
-        return;
-      }
+    const maxLimit = cardId === 'nature-disaster' ? 1 : 2;
+    const currentCount = currentCustomDeck.filter((id) => id === cardId).length;
+    if (currentCount >= maxLimit) {
+      showToast(cardId === 'nature-disaster'
+        ? '자연재해?? 카드는 덱에 최대 1장만 포함할 수 있습니다.'
+        : '같은 카드는 덱에 최대 2장까지만 포함할 수 있습니다.', 'error');
+      return;
     }
-    if (currentCustomDeck.length >= 60) {
-      showToast('덱은 최대 60장까지 구성할 수 있습니다.', 'error');
+    if (currentCustomDeck.length >= 20) {
+      showToast('덱은 최대 20장까지 구성할 수 있습니다.', 'error');
       return;
     }
     currentCustomDeck.push(cardId);
@@ -321,13 +335,16 @@
   function startMatchmaking() {
     const name = cleanName();
     if (!name) return;
-    if (currentCustomDeck.length < 10) {
-      showToast('덱 편성이 최소 10장 이상이어야 합니다.', 'error');
+    if (currentCustomDeck.length < 10 || currentCustomDeck.length > 20) {
+      showToast('덱 편성은 10장 이상 20장 이하이어야 합니다.', 'error');
       return;
     }
-    const hasMob = currentCustomDeck.some((id) => definition(id)?.type === 'mob' && id !== 'nature-disaster');
+    const hasMob = currentCustomDeck.some((id) => {
+      const def = definition(id);
+      return def?.type === 'mob' && id !== 'nature-disaster' && id !== 'gyarados';
+    });
     if (!hasMob) {
-      showToast('덱에 시작 몹 카드가 최소 1장 이상 있어야 합니다.', 'error');
+      showToast('덱에 시작 몹 카드가 최소 1장 이상 있어야 합니다. (갸라도스/자연재해 제외)', 'error');
       return;
     }
 
@@ -413,6 +430,7 @@
     const card = stateCard(selected.uid)?.instance;
     const cardDef = definition(card?.cardId);
     if (!cardDef) return null;
+    if (cardDef.id === 'gyarados') return 'ally';
     if (cardDef.type === 'attachment') return 'ally';
     if (cardDef.type === 'consumable') return cardDef.target || null;
     return null;
@@ -426,6 +444,12 @@
   function isTargetable(owner, mob) {
     const requirement = targetRequirement();
     if (!requirement) return false;
+    if (selected?.zone === 'hand') {
+      const card = stateCard(selected.uid)?.instance;
+      if (card?.cardId === 'gyarados') {
+        return owner === 'me' && mob.cardId === 'face-fish';
+      }
+    }
     if (requirement === 'any') return true;
     return (requirement === 'ally' && owner === 'me') || (requirement === 'enemy' && owner === 'opponent');
   }
@@ -495,9 +519,16 @@
 
   function boardMarkup(mobs, owner) {
     const html = [];
+    const isSetup = state?.status === 'setup';
+    const isMyBoard = owner === 'me';
+    const needStarterMob = isSetup && isMyBoard && state?.me?.board?.length === 0;
+    const handDef = selectedHandDefinition();
+    const canPlayToSlot = handDef?.type === 'mob' && handDef?.id !== 'gyarados';
+
     for (let index = 0; index < 3; index += 1) {
       const mob = mobs[index];
-      html.push(`<div class="board-slot ${mob ? 'occupied' : 'empty'} ${selectedHandDefinition()?.type === 'mob' && state?.isMyTurn && owner === 'me' && !mob ? 'targetable-slot' : ''}" data-slot="${index}" data-owner="${owner}">${mob ? mobMarkup(mob, owner, index) : `<span class="empty-slot-icon">${owner === 'me' ? '+' : '○'}</span><small>${owner === 'me' ? '필드' : '빈 필드'}</small>`}</div>`);
+      const isTargetableSlot = !mob && isMyBoard && state?.isMyTurn && (canPlayToSlot || needStarterMob);
+      html.push(`<div class="board-slot ${mob ? 'occupied' : 'empty'} ${isTargetableSlot ? 'targetable-slot' : ''}" data-slot="${index}" data-owner="${owner}">${mob ? mobMarkup(mob, owner, index) : `<span class="empty-slot-icon">${owner === 'me' ? '+' : '○'}</span><small>${owner === 'me' ? (needStarterMob ? '시작 몹 배치' : '필드') : '빈 필드'}</small>`}</div>`);
     }
     return html.join('');
   }
@@ -508,57 +539,113 @@
   }
 
   function selectionHint() {
+    if (state?.status === 'setup') {
+      return state.me.board.length === 0
+        ? '시작 몹을 필드에 배치하세요! (손패의 몹 카드 또는 빈 필드 클릭)'
+        : '상대방이 시작 몹을 배치하기를 기다리는 중입니다...';
+    }
+    if (state?.status === 'coin-flip') {
+      return '동전을 던져 선공과 후공을 결정하는 중입니다.';
+    }
     if (!state?.isMyTurn) return state?.status === 'playing' ? '상대가 행동 중입니다.' : '상대 입장을 기다리는 중입니다.';
-    if (pending?.type === 'skill') return '빛나는 상대 몹을 선택하세요.';
+    if (pending?.type === 'skill') return '공격할 상대 몹을 선택하세요. (스킬 발동 후 턴 종료)';
     if (pending?.type === 'devour') return '포식할 아군 몹을 선택하세요.';
     const handDef = selectedHandDefinition();
-    if (handDef?.type === 'mob') return '빈 필드를 클릭하거나 카드 드래그로 배치하세요.';
-    if (handDef?.target === 'ally') return '빛나는 내 몹을 선택하세요.';
-    if (handDef?.target === 'enemy') return '빛나는 상대 몹을 선택하세요.';
-    if (handDef?.target === 'any') return '내 몹 또는 상대 몹을 선택하세요.';
-    return '카드를 선택하거나 스킬을 사용하세요.';
+    if (handDef?.id === 'gyarados') return '필드의 아군 인면어 전장연을 선택(또는 드래그)해 진화시키세요.';
+    if (handDef?.type === 'mob') return '빈 필드를 클릭하거나 카드를 드래그해 배치하세요.';
+    if (handDef?.type === 'attachment') return '부착할 아군 몹을 선택하거나 드래그하세요.';
+    if (handDef?.type === 'consumable') return handDef.target ? '대상을 선택하거나 카드를 대상에게 드래그하세요.' : '클릭하거나 필드에 드래그해 즉시 사용하세요.';
+    return '내 몹을 클릭해 스킬을 사용하거나, 손패의 카드를 사용하세요.';
   }
 
   function renderInspector() {
     const inspector = $('#inspector');
-    const current = selected && stateCard(selected.uid);
-    if (!current) {
-      if (selected) selected = null;
-      inspector.innerHTML = `<div class="inspector-empty"><span class="inspect-icon">⌁</span><strong>카드 상세</strong><p>카드 또는 필드를 클릭하면 능력과 행동을 볼 수 있습니다.</p></div>`;
+    if (!inspector) return;
+
+    if (pending?.type === 'skill') {
+      inspector.innerHTML = `
+        <div class="simplified-skill-box">
+          <div class="simplified-skill-title">
+            <span>스킬 대상 선택</span>
+            <small style="color:#ef8278">선택 시 턴 종료</small>
+          </div>
+          <p style="color:#5ed4c0; font-size:0.92rem; margin:0.8rem 0; font-weight:700;">
+            필드에서 공격할 상대 몹을 클릭하세요!
+          </p>
+          <button class="button cancel-skill-mode-btn" type="button" data-cancel-skill>스킬 취소</button>
+        </div>
+      `;
       return;
     }
+
+    const current = selected && stateCard(selected.uid);
+    if (!current) {
+      inspector.innerHTML = `<div class="inspector-empty"><span class="inspect-icon">⚔</span><strong>스킬 & 행동</strong><p>내 필드의 몹을 클릭하면 즉시 스킬을 사용할 수 있습니다.</p></div>`;
+      return;
+    }
+
     const card = definition(current.instance.cardId);
     const own = current.owner === 'me';
-    const mob = card.type === 'mob';
-    const skills = mob ? card.skills.filter((skill) => skill.effect !== 'passive').map((skill) => {
-      const unavailable = !own || !state.isMyTurn || current.instance.skillUsed || current.instance.solarTurns > 0 ? 'disabled' : '';
-      return `<button class="skill-button" type="button" data-skill="${skill.id}" data-source="${current.instance.uid}" ${unavailable}><span>${escapeHtml(card.visual?.icon || '◆')}</span><strong>${escapeHtml(skill.name)}</strong><small>${escapeHtml(skill.text)}</small></button>`;
-    }).join('') : '';
-    const attachmentNames = mob && current.instance.attachments?.length
-      ? `<div class="detail-line"><span>부착</span><b>${current.instance.attachments.map((id) => escapeHtml(definition(id)?.name)).join(' · ')}</b></div>` : '';
-    const passive = card.passive ? `<div class="passive-box"><span>특성 · ${escapeHtml(card.passive.name)}</span><p>${escapeHtml(card.passive.text)}</p></div>` : '';
-    let action = '';
-    if (own && state.isMyTurn && current.zone === 'hand') {
-      if (card.type === 'mob') action = '<button class="button inspector-action" type="button" data-use-card>필드에 배치하기</button>';
-      else if (!card.target) action = '<button class="button inspector-action" type="button" data-use-card>즉시 사용하기</button>';
-      else action = `<button class="button inspector-action" type="button" data-use-card>대상 선택하기</button>`;
+
+    // 1. 내 필드의 몹 카드인 경우: 특성/부착물 상세 정보 표시 없이 오직 스킬 버튼만 깔끔하게 노출
+    if (own && current.zone === 'board' && card.type === 'mob') {
+      const isReady = state.isMyTurn && !current.instance.skillUsed && (current.instance.solarTurns || 0) <= 0;
+      const skills = card.skills.filter((skill) => skill.effect !== 'passive').map((skill) => {
+        const unavailable = !isReady ? 'disabled' : '';
+        return `<button class="big-skill-button" type="button" data-skill="${skill.id}" data-source="${current.instance.uid}" ${unavailable}>
+          <strong>⚡ ${escapeHtml(skill.name)}</strong>
+          <small>${escapeHtml(skill.text || '')}</small>
+        </button>`;
+      }).join('');
+
+      let action = '';
+      if (state.isMyTurn && card.id === 'nature-disaster') {
+        action += '<button class="button special-action" type="button" data-devour style="margin-top:0.4rem; width:100%;">다른 아군 몹 포식</button>';
+      }
+
+      inspector.innerHTML = `
+        <div class="simplified-skill-box" style="--card-accent:${cardColor(card)}">
+          <div class="simplified-skill-title">
+            <span>${escapeHtml(card.name)}</span>
+            <small>${current.instance.skillUsed ? '이번 턴 스킬 사용 완료' : (state.isMyTurn ? '스킬 누르면 대상 선택 후 턴 종료' : '상대 턴')}</small>
+          </div>
+          ${skills || '<p class="empty-copy">사용할 수 있는 스킬이 없습니다.</p>'}
+          ${action}
+        </div>
+      `;
+      return;
     }
-    if (own && state.isMyTurn && current.zone === 'board' && card.id === 'face-fish') {
-      action += '<button class="button special-action" type="button" data-evolve>갸라도스 전장연으로 진화</button>';
+
+    // 2. 내 손패 카드인 경우: 간결한 사용 버튼 제공
+    if (own && current.zone === 'hand') {
+      let action = '';
+      if (state.isMyTurn) {
+        if (card.id === 'gyarados') {
+          action = '<button class="button inspector-action" type="button" data-use-card style="width:100%;">인면어 위에 드래그하여 진화</button>';
+        } else if (card.type === 'mob') {
+          action = '<button class="button inspector-action" type="button" data-use-card style="width:100%;">필드에 배치하기</button>';
+        } else if (!card.target) {
+          action = '<button class="button inspector-action" type="button" data-use-card style="width:100%;">즉시 사용하기</button>';
+        } else {
+          action = '<button class="button inspector-action" type="button" data-use-card style="width:100%;">대상 선택하기</button>';
+        }
+      }
+
+      inspector.innerHTML = `
+        <div class="simplified-skill-box" style="--card-accent:${cardColor(card)}">
+          <div class="simplified-skill-title">
+            <span>${escapeHtml(card.name)}</span>
+            <small>${card.type === 'mob' ? '몹' : card.type === 'attachment' ? '부착형 아이템' : '소모형 아이템'}</small>
+          </div>
+          <p style="color:#dcebe7; font-size:0.85rem; margin:0.4rem 0;">${escapeHtml(card.text || (card.type === 'mob' ? `HP ${card.hp}` : ''))}</p>
+          ${action}
+        </div>
+      `;
+      return;
     }
-    if (own && state.isMyTurn && current.zone === 'board' && card.id === 'nature-disaster') {
-      action += '<button class="button special-action" type="button" data-devour>다른 아군 몹 포식</button>';
-    }
-    const thumbContent = card.image
-      ? `<img class="inspector-thumb-img" src="${cardImageUrl(card.image)}" alt="${escapeHtml(card.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='';" /><span style="display:none;">${escapeHtml(card.visual?.icon || '◆')}</span>`
-      : `<span>${escapeHtml(card.visual?.icon || '◆')}</span>`;
-    inspector.innerHTML = `<div class="inspector-card" style="--card-accent:${cardColor(card)}">
-      <div class="inspector-heading"><span class="detail-icon">${thumbContent}</span><div><p>${escapeHtml(mob ? '몹 카드' : card.type === 'attachment' ? '부착형 아이템' : '소모형 아이템')}</p><h2>${escapeHtml(card.name)}</h2></div></div>
-      ${mob ? `<div class="detail-health"><b>${current.instance.hp}</b><span>/ ${current.instance.maxHp} HP</span></div>` : ''}
-      ${mob ? passive : `<p class="detail-text">${escapeHtml(card.text)}</p>`}
-      ${mob ? `<div class="detail-line"><span>상태</span><b>${statusText(current.instance)}</b></div>${attachmentNames}<div class="skill-list">${skills || '<p class="empty-copy">사용할 수 있는 스킬이 없습니다.</p>'}</div>` : ''}
-      ${action}
-    </div>`;
+
+    // 그 외(상대 카드 등): 상세 정보 창을 띄우지 않음
+    inspector.innerHTML = `<div class="inspector-empty"><span class="inspect-icon">⚔</span><strong>스킬 & 행동</strong><p>내 필드의 몹을 클릭하면 즉시 스킬을 사용할 수 있습니다.</p></div>`;
   }
 
   function statusText(mob) {
@@ -579,12 +666,16 @@
   function render() {
     if (!state) return;
     const opponent = state.opponent;
+    const isSetup = state.status === 'setup';
     $('#room-code').textContent = state.roomCode;
-    $('#turn-count').textContent = `TURN ${state.turnNumber}`;
+    $('#turn-count').textContent = isSetup ? '준비 단계' : `TURN ${state.turnNumber}`;
     $('#turn-announcement').textContent = state.status === 'finished'
-      ? state.winner === 'me' ? '승리했습니다!' : state.winner === 'opponent' ? '패배했습니다' : '무승부입니다'
-      : state.status === 'lobby' ? '상대 입장을 기다리는 중' : state.isMyTurn ? '나의 턴' : `${opponent?.name || '상대'}의 턴`;
-    $('#turn-announcement').classList.toggle('my-turn', state.isMyTurn);
+      ? (state.winner === 'me' ? '승리했습니다!' : state.winner === 'opponent' ? '패배했습니다' : '무승부입니다')
+      : state.status === 'lobby' ? '상대 입장을 기다리는 중'
+      : isSetup ? (state.me.board.length === 0 ? '시작 몹을 배치하세요' : '상대방 배치 대기 중...')
+      : state.status === 'coin-flip' ? '선공 결정 중...'
+      : state.isMyTurn ? '나의 턴' : `${opponent?.name || '상대'}의 턴`;
+    $('#turn-announcement').classList.toggle('my-turn', Boolean(state.isMyTurn));
     $('#my-name').textContent = state.me.name;
     $('#my-hand-count').textContent = state.me.handCount;
     $('#my-deck-count').textContent = state.me.deckCount;
@@ -654,11 +745,32 @@
         chooseTarget(uid, owner);
         return;
       }
-      chooseCard(uid, 'board');
+      if (owner === 'me') {
+        chooseCard(uid, 'board');
+      } else {
+        // 상대 카드 클릭 시 상세 정보 모달이나 창이 뜨지 않도록 선택 해제
+        selected = null;
+        pending = null;
+        render();
+      }
       return;
     }
-    if (slot.dataset.owner === 'me' && state?.isMyTurn && selectedHandDefinition()?.type === 'mob') {
-      doAction({ type: 'play', cardUid: selected.uid });
+    if (slot.dataset.owner === 'me' && state?.isMyTurn) {
+      if (selectedHandDefinition()?.type === 'mob') {
+        if (selectedHandDefinition()?.id === 'gyarados') {
+          showToast('갸라도스는 빈 필드에 낼 수 없습니다. 필드의 인면어 전장연을 선택해 진화시키세요.', 'error');
+          return;
+        }
+        doAction({ type: 'play', cardUid: selected.uid });
+      } else if (state.status === 'setup' && state.me.board.length === 0) {
+        const mobCard = state.me.hand.find((c) => {
+          const def = definition(c.cardId);
+          return def?.type === 'mob' && def?.id !== 'nature-disaster' && def?.id !== 'gyarados';
+        });
+        if (mobCard) {
+          doAction({ type: 'play', cardUid: mobCard.uid });
+        }
+      }
     }
   }
 
@@ -672,8 +784,12 @@
     const current = selected && stateCard(selected.uid);
     if (!current || current.zone !== 'hand') return;
     const card = definition(current.instance.cardId);
+    if (card.id === 'gyarados') {
+      showToast('필드의 아군 인면어 전장연을 클릭하거나 드래그하여 진화시키세요.');
+      return;
+    }
     if (card.type === 'mob') {
-      showToast('빛나는 빈 필드를 클릭하거나 카드를 드래그해 배치하세요.');
+      showToast('빈 필드를 클릭하거나 카드를 드래그해 배치하세요.');
       return;
     }
     if (!card.target) {
@@ -685,6 +801,11 @@
   }
 
   function clickInspector(event) {
+    if (event.target.closest('[data-cancel-skill]')) {
+      pending = null;
+      render();
+      return;
+    }
     const skillButton = event.target.closest('[data-skill]');
     if (skillButton) {
       const source = stateCard(skillButton.dataset.source)?.instance;
@@ -694,7 +815,7 @@
         pending = { type: 'skill', target: 'enemy', sourceUid: source.uid, skillId: skill.id };
         selected = { uid: source.uid, zone: 'board' };
         render();
-        showToast('공격할 상대 몹을 선택하세요.');
+        showToast('공격할 상대 몹을 선택하세요. (스킬 발동 후 턴 종료)');
       } else {
         doAction({ type: 'skill', sourceUid: source.uid, skillId: skill.id });
       }
@@ -746,7 +867,49 @@
   }
 
   function openRules() {
-    openModal(`<div class="rules-modal"><p class="eyebrow">MVP RULESET</p><h2>기본 대전 규칙</h2><ul><li>각 플레이어는 무작위 몹 1장과 손패 4장으로 시작합니다.</li><li>내 턴에는 덱에서 한 번 드로우하고, 몹을 최대 3장까지 필드에 배치할 수 있습니다.</li><li>각 몹은 턴당 스킬을 한 번 사용할 수 있습니다.</li><li>마지막 필드 몹이 사라지면 패배합니다.</li><li>상대 손패와 덱 순서는 보이지 않으며, 양쪽 트레쉬는 공개됩니다.</li></ul><h3>키워드</h3><p><b>과충전</b>은 최대 10스택입니다. <b>혼란</b>과 <b>화상</b>은 동전 판정으로 처리됩니다. <b>전기장</b>은 내 필드의 과충전 획득량을 2배로 만듭니다.</p></div>`);
+    openModal(`<div class="rules-modal"><p class="eyebrow">MVP RULESET</p><h2>기본 대전 규칙</h2><ul><li>게임 시작 시 손패 3장을 지급받고(최소 1장 몹 보장), 시작 몹 1장을 배치합니다.</li><li>동전 던지기로 선공과 후공을 결정합니다.</li><li>내 턴에는 덱에서 한 번 드로우하고, 몹을 최대 3장까지 필드에 배치할 수 있습니다.</li><li>몹의 스킬을 사용하면 스킬 발동 후 자동으로 턴이 상대에게 넘어갑니다.</li><li>마지막 필드 몹이 사라지면 패배합니다.</li></ul><h3>키워드</h3><p><b>과충전</b>은 최대 10스택입니다. <b>혼란</b>과 <b>화상</b>은 동전 판정으로 처리됩니다. <b>전기장</b>은 내 필드의 과충전 획득량을 2배로 만듭니다.</p></div>`);
+  }
+
+  let turnSplashTimer;
+  function showTurnSplash(event) {
+    const splashEl = $('#turn-splash');
+    if (!splashEl) return;
+    clearTimeout(turnSplashTimer);
+
+    const isMe = event.activeSeat === state?.me?.seat || event.activeName === state?.me?.name;
+    splashEl.className = `turn-splash-overlay ${isMe ? 'my-turn' : 'opponent-turn'}`;
+    splashEl.innerHTML = `
+      <div class="turn-splash-box">
+        <h1 class="turn-splash-title">${isMe ? 'YOUR TURN' : 'OPPONENT TURN'}</h1>
+        <span class="turn-splash-subtitle">TURN ${event.turnNumber || state?.turnNumber || 1} · ${escapeHtml(event.activeName || '')}</span>
+      </div>
+    `;
+    splashEl.classList.remove('hidden');
+
+    turnSplashTimer = setTimeout(() => {
+      splashEl.classList.add('hidden');
+    }, 1500);
+  }
+
+  let coinTossTimer;
+  function showCoinToss(event) {
+    const coinEl = $('#coin-toss-screen');
+    if (!coinEl) return;
+    clearTimeout(coinTossTimer);
+
+    const isFirst = event.firstSeat === state?.me?.seat || event.firstName === state?.me?.name;
+    coinEl.innerHTML = `
+      <h2>선공 결정 동전 던지기</h2>
+      <div class="coin-3d-wrapper">
+        <div class="coin-3d-disc">${event.heads ? '앞' : '뒤'}</div>
+      </div>
+      <div class="coin-result-message">${escapeHtml(event.firstName)} 님의 선공! (${isFirst ? '내가 선공' : '상대방 선공'})</div>
+    `;
+    coinEl.classList.remove('hidden');
+
+    coinTossTimer = setTimeout(() => {
+      coinEl.classList.add('hidden');
+    }, 2500);
   }
 
   function enqueueEffect(event) {
@@ -762,6 +925,13 @@
       return;
     }
     showingEffect = true;
+
+    if (event.type === 'first-coin') {
+      showCoinToss(event);
+    } else if (event.type === 'turn-change') {
+      showTurnSplash(event);
+    }
+
     const type = escapeHtml(event.type || 'effect');
     const title = escapeHtml(event.title || event.result || '효과');
     const text = escapeHtml(event.text || (event.amount ? `${event.amount}` : ''));
@@ -770,10 +940,17 @@
     [event.targetId, event.sourceId].filter(Boolean).forEach((uid) => {
       document.querySelectorAll(`[data-uid="${CSS.escape(uid)}"]`).forEach((element) => element.classList.add('effect-active'));
     });
+
+    let duration = 900;
+    if (event.type === 'first-coin') duration = 2500;
+    else if (event.type === 'turn-change') duration = 1400;
+    else if (event.type === 'play-mob' || event.type === 'attach' || event.type === 'item') duration = 1300;
+    else if (event.type === 'special' || event.type === 'end') duration = 1500;
+
     setTimeout(() => {
       document.querySelectorAll('.effect-active').forEach((element) => element.classList.remove('effect-active'));
       displayNextEffect();
-    }, event.type === 'special' || event.type === 'end' ? 1500 : 900);
+    }, duration);
   }
 
   function copyRoomCode() {
@@ -804,13 +981,16 @@
     showToast('기본 덱으로 복원되었습니다.');
   });
   $('#deck-save-button')?.addEventListener('click', () => {
-    if (currentCustomDeck.length < 10) {
-      showToast('덱은 최소 10장 이상이어야 합니다.', 'error');
+    if (currentCustomDeck.length < 10 || currentCustomDeck.length > 20) {
+      showToast('덱은 10장 이상 20장 이하이어야 합니다.', 'error');
       return;
     }
-    const hasMob = currentCustomDeck.some((id) => definition(id)?.type === 'mob' && id !== 'nature-disaster');
+    const hasMob = currentCustomDeck.some((id) => {
+      const def = definition(id);
+      return def?.type === 'mob' && id !== 'nature-disaster' && id !== 'gyarados';
+    });
     if (!hasMob) {
-      showToast('덱에 시작 몹 카드가 최소 1장 이상 있어야 합니다.', 'error');
+      showToast('덱에 시작 몹 카드가 최소 1장 이상 있어야 합니다. (갸라도스/자연재해 제외)', 'error');
       return;
     }
     saveDeckToStorage();
@@ -862,27 +1042,119 @@
 
   $('#my-hand').addEventListener('dragstart', (event) => {
     const card = event.target.closest('.hand-card');
-    if (!card || !state?.isMyTurn) return;
-    const instance = stateCard(card.dataset.uid)?.instance;
-    if (definition(instance?.cardId)?.type !== 'mob') {
+    if (!card || !state?.isMyTurn) {
       event.preventDefault();
-      showToast('아이템은 대상을 선택해 사용하세요.');
       return;
     }
-    event.dataTransfer.setData('text/plain', card.dataset.uid);
-    selected = { uid: card.dataset.uid, zone: 'hand' };
+    const uid = card.dataset.uid;
+    event.dataTransfer.setData('text/plain', uid);
+    event.dataTransfer.effectAllowed = 'move';
+    selected = { uid, zone: 'hand' };
+    render();
   });
-  $('#my-board').addEventListener('dragover', (event) => {
-    if (event.target.closest('.board-slot.empty')) event.preventDefault();
-  });
-  $('#my-board').addEventListener('drop', (event) => {
-    const slot = event.target.closest('.board-slot.empty');
-    if (!slot || !state?.isMyTurn) return;
+
+  function handleDragOver(event) {
+    if (!state?.isMyTurn) return;
     event.preventDefault();
-    const uid = event.dataTransfer.getData('text/plain');
-    const instance = stateCard(uid)?.instance;
-    if (definition(instance?.cardId)?.type === 'mob') doAction({ type: 'play', cardUid: uid });
-  });
+    event.dataTransfer.dropEffect = 'move';
+  }
+
+  function handleDrop(event) {
+    if (!state?.isMyTurn) return;
+    event.preventDefault();
+    const uid = event.dataTransfer.getData('text/plain') || selected?.uid;
+    if (!uid) return;
+    const current = stateCard(uid);
+    if (!current || current.zone !== 'hand') return;
+    const cardDef = definition(current.instance.cardId);
+    if (!cardDef) return;
+
+    const targetCardEl = event.target.closest('.game-card');
+    const targetSlotEl = event.target.closest('.board-slot');
+
+    // 1. 드롭 대상이 필드의 몹 카드인 경우
+    if (targetCardEl) {
+      const targetUid = targetCardEl.dataset.uid;
+      const targetOwner = targetCardEl.dataset.owner;
+      const targetMob = stateCard(targetUid)?.instance;
+
+      // 1-1. 갸라도스를 아군 인면어 전장연 위에 드롭 -> 진화
+      if (cardDef.id === 'gyarados') {
+        if (targetOwner === 'me' && targetMob?.cardId === 'face-fish') {
+          if (targetMob.placedTurn !== null && targetMob.placedTurn !== undefined && targetMob.placedTurn === state.turnNumber) {
+            showToast('인면어 전장연을 배치한 턴에는 바로 진화할 수 없습니다.', 'error');
+            return;
+          }
+          doAction({ type: 'play', cardUid: uid, targetId: targetUid });
+        } else {
+          showToast('인면어 전장연 위에 드롭하여 진화시켜야 합니다.', 'error');
+        }
+        return;
+      }
+
+      // 1-2. 부착형 아이템을 아군 몹에 드롭 -> 부착
+      if (cardDef.type === 'attachment') {
+        if (targetOwner === 'me') {
+          doAction({ type: 'play', cardUid: uid, targetId: targetUid });
+        } else {
+          showToast('부착 아이템은 아군 몹에게만 사용할 수 있습니다.', 'error');
+        }
+        return;
+      }
+
+      // 1-3. 소모형 아이템을 몹에 드롭
+      if (cardDef.type === 'consumable') {
+        if (!cardDef.target) {
+          doAction({ type: 'play', cardUid: uid });
+          return;
+        }
+        if (cardDef.target === 'ally' && targetOwner !== 'me') {
+          showToast('아군 몹에게만 사용할 수 있습니다.', 'error');
+          return;
+        }
+        if (cardDef.target === 'enemy' && targetOwner !== 'opponent') {
+          showToast('상대 몹에게만 사용할 수 있습니다.', 'error');
+          return;
+        }
+        doAction({ type: 'play', cardUid: uid, targetId: targetUid });
+        return;
+      }
+
+      showToast('빈 필드 슬롯에 드롭하세요.', 'error');
+      return;
+    }
+
+    // 2. 드롭 대상이 필드 슬롯인 경우
+    if (targetSlotEl) {
+      const slotOwner = targetSlotEl.dataset.owner;
+      if (slotOwner === 'me') {
+        if (cardDef.id === 'gyarados') {
+          showToast('갸라도스는 빈 필드에 낼 수 없습니다. 필드의 인면어 전장연 위에 드롭하세요.', 'error');
+          return;
+        }
+        if (cardDef.type === 'mob') {
+          doAction({ type: 'play', cardUid: uid });
+          return;
+        }
+        if (cardDef.type === 'consumable' && !cardDef.target) {
+          doAction({ type: 'play', cardUid: uid });
+          return;
+        }
+        showToast('대상이 필요한 아이템입니다. 대상 몹 위에 드롭하세요.', 'error');
+        return;
+      }
+    }
+
+    // 3. 대상 없는 소모품을 필드 아무 곳에나 드롭한 경우
+    if (cardDef.type === 'consumable' && !cardDef.target) {
+      doAction({ type: 'play', cardUid: uid });
+    }
+  }
+
+  $('#my-board').addEventListener('dragover', handleDragOver);
+  $('#opponent-board').addEventListener('dragover', handleDragOver);
+  $('#my-board').addEventListener('drop', handleDrop);
+  $('#opponent-board').addEventListener('drop', handleDrop);
 
   Promise.all([loadDefinitions()]).then(() => {
     initSocket();

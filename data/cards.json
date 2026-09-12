@@ -34,7 +34,7 @@
       "name": "갸라도스 전장연",
       "hp": 400,
       "image": "/image/super_fish.png",
-      "hidden": true,
+      "text": "인면어 전장연 진화 카드. 필드의 아군 인면어 위에 드래그하여 진화 (배치 턴 진화 불가)",
       "evolutionOf": "face-fish",
       "visual": { "accent": "blue", "icon": "♒", "vfx": "tidal" },
       "skills": [

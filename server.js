@@ -95,6 +95,7 @@ function createCard(cardId) {
     skillUsed: false,
     lastSkill: null,
     lastTargetId: null,
+    placedTurn: null,
     solarTurns: 0,
     photosynthesisBonus: 0
   };
@@ -104,38 +105,35 @@ function buildDeck(customCardIds) {
   if (Array.isArray(customCardIds) && customCardIds.length >= 10) {
     const validCards = customCardIds
       .filter((id) => cards.has(id) && !cards.get(id).hidden)
-      .slice(0, 50);
-    // 자연재해 카드는 최대 1장 제한
-    let hasDisaster = false;
+      .slice(0, 20);
+    // 카드별 장수 제한: 같은 카드 최대 2장, 자연재해??는 최대 1장
+    const counts = new Map();
     const filtered = [];
     for (const id of validCards) {
-      if (id === 'nature-disaster') {
-        if (!hasDisaster) {
-          filtered.push(id);
-          hasDisaster = true;
-        }
-      } else {
+      const currentCount = counts.get(id) || 0;
+      const maxLimit = id === 'nature-disaster' ? 1 : 2;
+      if (currentCount < maxLimit) {
+        counts.set(id, currentCount + 1);
         filtered.push(id);
       }
     }
-    // 시작 몹으로 쓰일 수 있는 일반 몹 카드가 최소 1장 이상 있어야 함
-    const mobCandidates = filtered.filter((id) => cards.get(id).type === 'mob' && id !== 'nature-disaster');
+    // 시작 몹으로 쓰일 수 있는 일반 몹 카드가 최소 1장 이상 있어야 함 (자연재해, 갸라도스 제외)
+    const mobCandidates = filtered.filter((id) => {
+      const def = cards.get(id);
+      return def && def.type === 'mob' && id !== 'nature-disaster' && id !== 'gyarados';
+    });
     if (mobCandidates.length > 0 && filtered.length >= 10) {
       return shuffle(filtered.map(createCard));
     }
   }
 
-  const mobs = [
-    'jeonjangyeon', 'face-fish', 'snorlax', 'mecha', 'hair', 'jongchu', 'biker',
-    'saurus', 'jongbaragi', 'knight', 'running-man', 'taekwondo', 'menhera', 'nature-disaster'
+  // 20장 기본 덱 (각 카드 최대 2장)
+  const defaultList = [
+    'jeonjangyeon', 'face-fish', 'gyarados', 'snorlax', 'mecha', 'jongchu', 'biker',
+    'patience', 'patience', 'learning', 'sociability', 'sociability',
+    'draw-one-mob', 'draw-one-mob', 'cleanse', 'cleanse', 'bag', 'bag', 'positive-negative', 'eraser'
   ];
-  const attachments = ['patience', 'learning', 'sociability', 'patience', 'learning', 'sociability'];
-  const items = [
-    'draw-one-mob', 'bag', 'no-ai', 'cleanse', 'positive-negative', 'return-class',
-    'eraser', 'hyperfocus', 'pop-quiz', 'ahe', 'draw-one-mob', 'bag', 'no-ai',
-    'cleanse', 'positive-negative', 'return-class', 'eraser', 'hyperfocus', 'pop-quiz'
-  ];
-  return shuffle([...mobs, ...attachments, ...items].map(createCard));
+  return shuffle(defaultList.map(createCard));
 }
 
 function shuffle(list) {
@@ -202,7 +200,8 @@ function publicMob(mob) {
       nextAttackWeak: mob.modifiers.nextAttackWeak
     },
     skillUsed: mob.skillUsed,
-    solarTurns: mob.solarTurns
+    solarTurns: mob.solarTurns,
+    placedTurn: mob.placedTurn
   };
 }
 
@@ -235,7 +234,7 @@ function viewFor(room, seat) {
     status: room.status,
     turnNumber: room.turnNumber,
     activeSeat: room.activeSeat,
-    isMyTurn: room.status === 'playing' && room.activeSeat === seat,
+    isMyTurn: (room.status === 'playing' && room.activeSeat === seat) || (room.status === 'setup' && me.board.length === 0),
     me: common(me, true),
     opponent: opponent ? common(opponent, false) : null,
     logs: room.logs,
@@ -262,9 +261,38 @@ function playerForSocket(socket) {
   return { room, player };
 }
 
+function startCoinFlipAndGame(room) {
+  room.status = 'coin-flip';
+  const heads = Math.random() < 0.5;
+  const firstSeat = heads ? 0 : 1;
+  const firstPlayer = playerBySeat(room, firstSeat);
+  room.activeSeat = firstSeat;
+
+  log(room, `동전 던지기: ${heads ? '앞면' : '뒷면'}! ${firstPlayer.name} 님이 선공입니다.`, 'coin');
+  effect(room, {
+    type: 'first-coin',
+    heads,
+    result: heads ? '앞면' : '뒷면',
+    firstSeat,
+    firstName: firstPlayer.name,
+    title: '선공 결정 동전 던지기!',
+    text: `${heads ? '앞면' : '뒷면'}! ${firstPlayer.name} 님의 선공!`
+  });
+  emitState(room);
+
+  setTimeout(() => {
+    if (room.status !== 'coin-flip') return;
+    room.status = 'playing';
+    room.turnNumber = 1;
+    log(room, `대전 시작! ${firstPlayer.name} 님의 선공입니다.`, 'start');
+    beginTurn(room, firstPlayer);
+    emitState(room);
+  }, 2600);
+}
+
 function startGame(room) {
-  room.status = 'playing';
-  room.turnNumber = 1;
+  room.status = 'setup';
+  room.turnNumber = 0;
   room.winner = null;
   room.healingForbidden = false;
   room.healingSourceUid = null;
@@ -275,21 +303,32 @@ function startGame(room) {
     player.trash = [];
     player.fieldEffect = null;
     player.drawUsed = false;
-    const candidates = player.deck
+
+    // 시작 패 3장: 최소 1장은 일반 몹 카드 보장 (자연재해, 갸라도스 제외)
+    const mobCandidates = player.deck
       .map((entry, index) => ({ entry, index }))
       .filter(({ entry }) => {
         const definition = cardOf(entry);
-        return definition.type === 'mob' && definition.id !== 'nature-disaster';
+        return definition.type === 'mob' && definition.id !== 'nature-disaster' && definition.id !== 'gyarados';
       });
-    const starter = candidates[Math.floor(Math.random() * candidates.length)];
-    player.board.push(player.deck.splice(starter.index, 1)[0]);
-    for (let count = 0; count < RULES.startingHandSize; count += 1) drawCard(room, player);
+    const starterIndex = mobCandidates.length > 0
+      ? mobCandidates[Math.floor(Math.random() * mobCandidates.length)].index
+      : 0;
+    const [guaranteedMob] = player.deck.splice(starterIndex, 1);
+    player.hand.push(guaranteedMob);
+
+    // 나머지 2장 드로우 (총 3장)
+    for (let count = 0; count < 2; count += 1) {
+      drawCard(room, player);
+    }
   });
-  room.activeSeat = Math.random() < 0.5 ? 0 : 1;
-  const first = playerBySeat(room, room.activeSeat);
-  log(room, `대전 시작! ${first.name} 님의 선공입니다.`, 'start');
-  effect(room, { type: 'start', title: '대전 시작', text: `${first.name} 님의 턴` });
-  beginTurn(room, first);
+
+  log(room, '시작 몹 배치 단계입니다. 손패에서 시작 몹을 필드에 배치하세요.', 'start');
+  effect(room, {
+    type: 'setup-phase',
+    title: '시작 몹 배치',
+    text: '손패에서 몹 카드 1장을 필드에 배치하세요!'
+  });
 }
 
 function drawCard(room, player, onlyMob = false) {
@@ -466,7 +505,14 @@ function beginTurn(room, player) {
   player.drawUsed = false;
   player.board.forEach((mob) => { mob.skillUsed = false; });
   log(room, `${player.name} 님의 ${room.turnNumber}턴`, 'turn');
-  effect(room, { type: 'turn', title: `${player.name} 님의 턴`, text: '카드를 뽑거나 행동하세요.' });
+  effect(room, {
+    type: 'turn-change',
+    activeSeat: player.seat,
+    activeName: player.name,
+    turnNumber: room.turnNumber,
+    title: `${player.name} 님의 턴!`,
+    text: `TURN ${room.turnNumber}`
+  });
 
   [...player.board].forEach((mob) => applyBurn(room, player, mob));
   removeDead(room);
@@ -675,11 +721,50 @@ function playCard(room, player, cardUid, targetId) {
   const definition = cardOf(instance);
   const opponent = opponentOf(room, player);
 
+  if (definition.id === 'gyarados') {
+    if (!targetId) throw new Error('갸라도스는 빈 필드에 낼 수 없습니다. 필드의 인면어 전장연 위에 놓아 진화시켜야 합니다.');
+    const targetMob = player.board.find((entry) => entry.uid === targetId);
+    if (!targetMob || targetMob.cardId !== 'face-fish') {
+      throw new Error('갸라도스는 아군 인면어 전장연 위에만 진화시킬 수 있습니다.');
+    }
+    if (targetMob.placedTurn !== null && targetMob.placedTurn !== undefined && targetMob.placedTurn === room.turnNumber) {
+      throw new Error('인면어 전장연을 배치한 턴에는 바로 진화할 수 없습니다.');
+    }
+    const hpRatio = targetMob.hp / Math.max(targetMob.maxHp, 1);
+    targetMob.cardId = 'gyarados';
+    targetMob.maxHp = cards.get('gyarados').hp;
+    targetMob.hp = Math.max(1, Math.ceil(targetMob.maxHp * hpRatio));
+    player.hand.splice(index, 1);
+    player.trash.push({ uid: instance.uid, cardId: 'gyarados' });
+    effect(room, {
+      type: 'special',
+      vfx: 'tidal',
+      targetId: targetMob.uid,
+      playerSeat: player.seat,
+      playerName: player.name,
+      cardName: definition.name,
+      title: `${player.name} 님이 갸라도스로 진화!`,
+      text: '인면어 전장연이 갸라도스 전장연으로 진화했습니다.'
+    });
+    log(room, `${player.name} 님이 인면어 전장연을 갸라도스 전장연으로 진화시켰습니다!`, 'special');
+    return;
+  }
+
   if (definition.type === 'mob') {
     if (player.board.length >= RULES.maxBoardSize) throw new Error(`필드에는 몹을 최대 ${RULES.maxBoardSize}장까지 놓을 수 있습니다.`);
+    instance.placedTurn = room.turnNumber;
     player.hand.splice(index, 1);
     player.board.push(instance);
-    effect(room, { type: 'play', vfx: definition.visual.vfx, targetId: instance.uid, title: definition.name });
+    effect(room, {
+      type: 'play-mob',
+      vfx: definition.visual.vfx,
+      targetId: instance.uid,
+      playerSeat: player.seat,
+      playerName: player.name,
+      cardName: definition.name,
+      title: `${player.name} 님이 [${definition.name}] 배치!`,
+      text: `HP ${instance.hp}`
+    });
     log(room, `${player.name} 님이 ${definition.name}을(를) 필드에 냈습니다.`, 'play');
     if (definition.id === 'nature-disaster') {
       effect(room, { type: 'special', vfx: 'disaster', targetId: instance.uid, title: '자연재해?? 등장!', text: '전장이 흔들립니다.' });
@@ -692,7 +777,16 @@ function playCard(room, player, cardUid, targetId) {
     player.hand.splice(index, 1);
     mob.attachments.push(definition.id);
     player.trash.push({ uid: instance.uid, cardId: instance.cardId, attached: true });
-    effect(room, { type: 'attach', vfx: definition.visual.vfx, targetId: mob.uid, title: `${definition.name} 부착` });
+    effect(room, {
+      type: 'attach',
+      vfx: definition.visual.vfx,
+      targetId: mob.uid,
+      playerSeat: player.seat,
+      playerName: player.name,
+      cardName: definition.name,
+      title: `${player.name} 님이 [${definition.name}] 부착!`,
+      text: `${cardOf(mob).name}에 부착되었습니다.`
+    });
     log(room, `${definition.name}이(가) ${cardOf(mob).name}에 부착되었습니다.`, 'play');
     maybeAwaken(room, player, mob);
     return;
@@ -711,7 +805,16 @@ function playCard(room, player, cardUid, targetId) {
   if (targetRule) selection = validateTarget(player, opponent, targetId, targetRule);
   player.hand.splice(index, 1);
   player.trash.push({ uid: instance.uid, cardId: instance.cardId });
-  effect(room, { type: 'item', vfx: definition.visual.vfx, targetId: selection?.mob.uid, title: definition.name });
+  effect(room, {
+    type: 'item',
+    vfx: definition.visual.vfx,
+    targetId: selection?.mob?.uid,
+    playerSeat: player.seat,
+    playerName: player.name,
+    cardName: definition.name,
+    title: `${player.name} 님이 [${definition.name}] 사용!`,
+    text: definition.text
+  });
   log(room, `${player.name} 님이 ${definition.name}을(를) 사용했습니다.`, 'play');
 
   switch (definition.effect) {
@@ -784,16 +887,45 @@ function performAction(socket, payload) {
   const found = playerForSocket(socket);
   if (!found) throw new Error('방에 다시 입장해 주세요.');
   const { room, player } = found;
+  const action = payload || {};
+
+  // 1. 시작 몹 배치 단계 (setup)
+  if (room.status === 'setup') {
+    if (action.type !== 'play') throw new Error('시작 몹을 필드에 배치해 주세요.');
+    if (player.board.length >= 1) throw new Error('이미 시작 몹을 배치했습니다. 상대방을 기다리는 중입니다.');
+
+    const cardInstance = player.hand.find((card) => card.uid === action.cardUid);
+    if (!cardInstance) throw new Error('패에 없는 카드입니다.');
+    const definition = cardOf(cardInstance);
+    if (definition.type !== 'mob' || definition.id === 'nature-disaster' || definition.id === 'gyarados') {
+      throw new Error('시작 몹은 일반 몹 카드만 배치할 수 있습니다. (갸라도스/자연재해 제외)');
+    }
+
+    cardInstance.placedTurn = 0;
+    playCard(room, player, action.cardUid, action.targetId);
+    if (player.board[0]) player.board[0].placedTurn = 0;
+
+    const allPlaced = room.players.every((p) => p.board.length >= 1);
+    if (allPlaced) {
+      startCoinFlipAndGame(room);
+    } else {
+      log(room, `${player.name} 님이 시작 몹을 배치했습니다. 상대방을 기다리는 중...`, 'system');
+      emitState(room);
+    }
+    return;
+  }
+
+  // 2. 대전 진행 단계 (playing)
   if (room.status !== 'playing') throw new Error('진행 중인 게임이 아닙니다.');
   if (room.activeSeat !== player.seat) throw new Error('상대의 턴입니다.');
-  const action = payload || {};
+
   switch (action.type) {
     case 'draw': {
       if (player.drawUsed) throw new Error('드로우는 턴에 한 번만 할 수 있습니다.');
       const drawn = drawCard(room, player);
       if (!drawn) throw new Error('덱에 카드가 없습니다.');
       player.drawUsed = true;
-      effect(room, { type: 'draw', vfx: 'draw', playerSeat: player.seat, title: '드로우' });
+      effect(room, { type: 'draw', vfx: 'draw', playerSeat: player.seat, playerName: player.name, title: `${player.name} 드로우` });
       log(room, `${player.name} 님이 카드 1장을 드로우했습니다.`, 'draw');
       break;
     }
@@ -806,6 +938,13 @@ function performAction(socket, payload) {
       const skill = cardOf(source).skills.find((entry) => entry.id === action.skillId);
       if (!skill) throw new Error('알 수 없는 스킬입니다.');
       resolveSkill(room, player, source, skill, action.targetId);
+
+      // 스킬 사용 후 자동으로 턴 종료!
+      if (room.status === 'playing' && room.winner === null) {
+        room.activeSeat = player.seat === 0 ? 1 : 0;
+        room.turnNumber += 1;
+        beginTurn(room, playerBySeat(room, room.activeSeat));
+      }
       break;
     }
     case 'evolve': {
