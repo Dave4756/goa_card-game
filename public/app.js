@@ -42,6 +42,7 @@
   }
   let currentCustomDeck = [];
   let isMatchmaking = false;
+  let activeRoomCode = null;
   let socket;
   let reconnecting = false;
   let effectQueue = [];
@@ -169,16 +170,27 @@
       state = nextState;
       activeRoomCode = nextState.roomCode;
       localStorage.setItem('goa-room-code', activeRoomCode);
-      if (playDialog.close) playDialog.close();
-      if (deckDialog.close) deckDialog.close();
-      showGame();
-      render();
+      if (nextState.status !== 'lobby') {
+        closePlayModal();
+        closeDeckBuilder();
+        showGame();
+        render();
+      } else {
+        closePlayModal();
+        setLobbyMessage(`방 코드 [${activeRoomCode}] 대기 중 - 상대방이 입장하면 대전이 시작됩니다.`);
+      }
     });
-    socket.on('matchFound', (_data) => {
+    socket.on('matchFound', (data) => {
       isMatchmaking = false;
       if (matchmakingArea) matchmakingArea.classList.add('hidden');
       if (startMatchmakingBtn) startMatchmakingBtn.classList.remove('hidden');
-      if (playDialog.close) playDialog.close();
+      if (data?.code) {
+        activeRoomCode = data.code;
+        localStorage.setItem('goa-room-code', activeRoomCode);
+      }
+      closePlayModal();
+      closeDeckBuilder();
+      showGame();
       showToast('상대를 찾았습니다! 대전을 시작합니다.');
     });
     socket.on('gameEffect', (event) => enqueueEffect(event));
@@ -187,6 +199,7 @@
   function showGame() {
     lobbyScreen.classList.add('hidden');
     gameScreen.classList.remove('hidden');
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }
 
   function send(event, payload) {
@@ -378,28 +391,52 @@
   async function createRoom() {
     const name = cleanName();
     if (!name) return;
+    if (currentCustomDeck.length < 10 || currentCustomDeck.length > 20) {
+      showToast('덱 편성은 10장 이상 20장 이하이어야 합니다.', 'error');
+      return;
+    }
+    const hasMob = currentCustomDeck.some((id) => {
+      const def = definition(id);
+      return def?.type === 'mob' && id !== 'nature-disaster' && id !== 'gyarados';
+    });
+    if (!hasMob) {
+      showToast('덱에 시작 몹 카드가 최소 1장 이상 있어야 합니다. (갸라도스/자연재해 제외)', 'error');
+      return;
+    }
+
     const reply = await send('createRoom', { name, playerId, customDeck: currentCustomDeck });
     if (!reply.ok) {
       setLobbyMessage(reply.message || '방을 만들 수 없습니다.', true);
+      showToast(reply.message || '방 생성에 실패했습니다.', 'error');
       return;
     }
     closePlayModal();
     activeRoomCode = reply.code;
+    if (roomInput) roomInput.value = reply.code;
     updateRoomUrl(reply.code);
-    setLobbyMessage(`방 ${reply.code}를 만들었습니다. 친구를 기다리는 중입니다.`);
+    localStorage.setItem('goa-room-code', reply.code);
+    setLobbyMessage(`방 코드 [${reply.code}]를 생성했습니다. 상대방이 입장하면 대전이 시작됩니다.`);
+    showToast(`방 코드 [${reply.code}] 생성 완료!`);
+    navigator.clipboard?.writeText(reply.code).catch(() => {});
   }
 
   async function joinRoom() {
     const name = cleanName();
     if (!name) return;
+    if (currentCustomDeck.length < 10 || currentCustomDeck.length > 20) {
+      showToast('덱 편성은 10장 이상 20장 이하이어야 합니다.', 'error');
+      return;
+    }
     const code = roomInput.value.trim().toUpperCase();
     if (code.length !== 5) {
       setLobbyMessage('5자리 방 코드를 입력해 주세요.', true);
+      showToast('5자리 방 코드를 입력해 주세요.', 'error');
       return;
     }
     const reply = await send('joinRoom', { code, name, playerId, customDeck: currentCustomDeck });
     if (!reply.ok) {
       setLobbyMessage(reply.message || '방에 입장할 수 없습니다.', true);
+      showToast(reply.message || '방 입장에 실패했습니다.', 'error');
       return;
     }
     closePlayModal();
@@ -407,6 +444,8 @@
     sessionStorage.setItem('goa-player-id', playerId);
     activeRoomCode = reply.code;
     updateRoomUrl(reply.code);
+    localStorage.setItem('goa-room-code', reply.code);
+    showToast(`방 [${reply.code}]에 참가했습니다!`);
   }
 
   function updateRoomUrl(code) {
@@ -748,8 +787,8 @@
     $('#my-field-effect').textContent = state.me.fieldEffect === 'electric-field' ? '⚡ 전기장' : '';
     $('#my-field-effect').classList.toggle('active', Boolean(state.me.fieldEffect));
     $('#my-connection').textContent = state.me.connected ? '연결됨' : '연결 끊김';
-    $('#my-board').innerHTML = boardMarkup(state.me.board, 'me');
-    $('#my-hand').innerHTML = state.me.hand.map(handMarkup).join('') || '<p class="empty-hand">손패가 없습니다.</p>';
+    $('#my-board').innerHTML = boardMarkup(state.me.board || [], 'me');
+    $('#my-hand').innerHTML = (state.me.hand || []).map(handMarkup).join('') || '<p class="empty-hand">손패가 없습니다.</p>';
 
     $('#opponent-name').textContent = opponent?.name || '상대를 기다리는 중';
     $('#opponent-connection').textContent = opponent ? (opponent.connected ? '연결됨' : '재연결 대기') : '대기';
