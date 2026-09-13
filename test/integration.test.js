@@ -31,14 +31,26 @@ test('two players receive private hands and a synchronized game state', async (t
   t.after(() => server.kill());
 
   await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Server did not start')), 5000);
+    let output = '';
+    const timer = setTimeout(() => reject(new Error(`Server did not start: ${output}`)), 5000);
     server.stdout.on('data', (chunk) => {
-      if (chunk.toString().includes('서버가')) {
+      output += chunk.toString();
+      if (output.includes('서버가')) {
         clearTimeout(timer);
         resolve();
       }
     });
-    server.once('error', reject);
+    server.stderr.on('data', (chunk) => { output += chunk.toString(); });
+    server.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    server.once('exit', (code) => {
+      if (code !== null && code !== 0) {
+        clearTimeout(timer);
+        reject(new Error(`Server exited (${code}): ${output}`));
+      }
+    });
   });
 
   const first = await connect(`http://127.0.0.1:${port}`);

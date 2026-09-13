@@ -528,7 +528,8 @@
     const artContent = card.image
       ? `<img class="card-art-img" src="${cardImageUrl(card.image)}" alt="${escapeHtml(card.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='';" /><span style="display:none;">${escapeHtml(card.visual?.icon || '◆')}</span>`
       : `<span>${escapeHtml(card.visual?.icon || '◆')}</span>`;
-    return `<article class="game-card mob-card ${owner} ${selectedClass} ${targetableClass} ${damaged}" data-uid="${mob.uid}" data-owner="${owner}" data-index="${index}" style="--card-accent:${cardColor(card)}" role="button" tabindex="0" aria-label="${escapeHtml(card.name)} 카드">
+    const canDrag = owner === 'me' && state?.isMyTurn && state?.status === 'playing';
+    return `<article class="game-card mob-card ${owner} ${selectedClass} ${targetableClass} ${damaged}" data-uid="${mob.uid}" data-owner="${owner}" data-index="${index}" draggable="${canDrag}" style="--card-accent:${cardColor(card)}" role="button" tabindex="0" aria-label="${escapeHtml(card.name)} 카드">
       <div class="card-glow"></div>
       <div class="card-top"><span class="card-type">몹</span><span class="card-icon">${escapeHtml(card.visual?.icon || '◆')}</span></div>
       <div class="card-art">${artContent}</div>
@@ -651,7 +652,7 @@
       const skills = card.skills?.filter((skill) => skill.effect !== 'passive').map((skill) => {
         if (own) {
           const unavailable = !isReady ? 'disabled' : '';
-          return `<button class="big-skill-button" type="button" data-skill="${skill.id}" data-source="${mob.uid}" ${unavailable}>
+          return `<button class="big-skill-button" type="button" data-skill="${skill.id}" data-source="${mob.uid}" data-skill-target="${skill.target}" draggable="${!unavailable}" ${unavailable}>
             <strong>⚡ ${escapeHtml(skill.name)}</strong>
             <small>${escapeHtml(skill.text || '')}</small>
           </button>`;
@@ -1137,6 +1138,23 @@
     }
   });
 
+  function setDragPayload(event, payload) {
+    event.dataTransfer.setData('application/x-goa-action', JSON.stringify(payload));
+    event.dataTransfer.setData('text/plain', payload.uid || payload.sourceUid || 'goa');
+    event.dataTransfer.effectAllowed = 'move';
+  }
+
+  function getDragPayload(event) {
+    try {
+      const encoded = event.dataTransfer.getData('application/x-goa-action');
+      if (encoded) return JSON.parse(encoded);
+    } catch (_error) {
+      // Invalid external drag data is ignored.
+    }
+    const uid = event.dataTransfer.getData('text/plain');
+    return uid ? { kind: 'hand', uid } : null;
+  }
+
   $('#my-hand').addEventListener('dragstart', (event) => {
     const card = event.target.closest('.hand-card');
     if (!card || !state?.isMyTurn) {
@@ -1144,30 +1162,118 @@
       return;
     }
     const uid = card.dataset.uid;
-    event.dataTransfer.setData('text/plain', uid);
-    event.dataTransfer.effectAllowed = 'move';
+    setDragPayload(event, { kind: 'hand', uid });
     selected = { uid, zone: 'hand' };
     render();
+  });
+
+  $('#my-board').addEventListener('dragstart', (event) => {
+    const card = event.target.closest('.game-card[data-owner="me"]');
+    if (!card || !state?.isMyTurn || state.status !== 'playing') {
+      event.preventDefault();
+      return;
+    }
+    setDragPayload(event, { kind: 'mob', uid: card.dataset.uid });
+    card.classList.add('is-dragging');
+  });
+
+  $('#my-board').addEventListener('dragend', () => {
+    document.querySelectorAll('.is-dragging, .drag-over').forEach((element) => element.classList.remove('is-dragging', 'drag-over'));
+  });
+
+  $('#inspector').addEventListener('dragstart', (event) => {
+    const skill = event.target.closest('[data-skill]');
+    if (!skill || skill.disabled || !state?.isMyTurn) {
+      event.preventDefault();
+      return;
+    }
+    setDragPayload(event, {
+      kind: 'skill',
+      sourceUid: skill.dataset.source,
+      skillId: skill.dataset.skill,
+      target: skill.dataset.skillTarget
+    });
   });
 
   function handleDragOver(event) {
     if (!state?.isMyTurn) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
+    event.target.closest('.game-card, .board-slot')?.classList.add('drag-over');
+  }
+
+  function handleDragLeave(event) {
+    event.target.closest('.game-card, .board-slot')?.classList.remove('drag-over');
   }
 
   function handleDrop(event) {
     if (!state?.isMyTurn) return;
     event.preventDefault();
-    const uid = event.dataTransfer.getData('text/plain') || selected?.uid;
+    document.querySelectorAll('.drag-over').forEach((element) => element.classList.remove('drag-over'));
+    const payload = getDragPayload(event);
+    if (!payload) return;
+
+    const targetCardEl = event.target.closest('.game-card');
+    const targetSlotEl = event.target.closest('.board-slot');
+
+    // 스킬 버튼을 목표에 드롭: 정확히 고른 스킬을 바로 사용합니다.
+    if (payload.kind === 'skill') {
+      if (!targetCardEl) {
+        showToast('스킬은 대상 몹 카드 위에 드롭하세요.', 'error');
+        return;
+      }
+      const targetOwner = targetCardEl.dataset.owner;
+      if (payload.target === 'enemy' && targetOwner !== 'opponent') {
+        showToast('공격 스킬은 상대 몹에게 드롭하세요.', 'error');
+        return;
+      }
+      if ((payload.target === 'all-enemies' || payload.target === 'all') && targetOwner !== 'opponent') {
+        showToast('이 스킬은 상대 필드에 드롭하세요.', 'error');
+        return;
+      }
+      if (payload.target === 'self' && (targetOwner !== 'me' || targetCardEl.dataset.uid !== payload.sourceUid)) {
+        showToast('자신을 대상으로 하는 스킬은 해당 몹 위에 드롭하세요.', 'error');
+        return;
+      }
+      if (payload.target === 'ally' && targetOwner !== 'me') {
+        showToast('이 스킬은 아군 몹에게 사용해야 합니다.', 'error');
+        return;
+      }
+      doAction({ type: 'skill', sourceUid: payload.sourceUid, skillId: payload.skillId, targetId: targetCardEl.dataset.uid });
+      return;
+    }
+
+    // 내 필드 몹을 드롭: 상대에게는 첫 공격 스킬, 자신에게는 첫 자기 스킬을 사용합니다.
+    if (payload.kind === 'mob') {
+      const source = stateCard(payload.uid)?.instance;
+      const sourceDef = definition(source?.cardId);
+      if (!source || !sourceDef || !targetCardEl) {
+        showToast('내 몹을 상대 몹 또는 자신에게 드롭하세요.', 'error');
+        return;
+      }
+      const targetOwner = targetCardEl.dataset.owner;
+      const targetUid = targetCardEl.dataset.uid;
+      if (sourceDef.id === 'nature-disaster' && targetOwner === 'me' && targetUid !== source.uid) {
+        doAction({ type: 'devour', sourceUid: source.uid, targetId: targetUid });
+        return;
+      }
+      const skill = sourceDef.skills?.find((entry) => targetOwner === 'opponent'
+        ? (entry.target === 'enemy' || entry.target === 'all-enemies' || entry.target === 'all')
+        : (entry.target === 'self' || entry.target === 'ally'));
+      if (!skill) {
+        showToast(targetOwner === 'opponent' ? '이 몹에게는 상대를 직접 겨냥하는 스킬이 없습니다.' : '이 몹에게는 아군 대상으로 쓰는 스킬이 없습니다.', 'error');
+        return;
+      }
+      doAction({ type: 'skill', sourceUid: source.uid, skillId: skill.id, targetId: skill.target === 'enemy' || skill.target === 'ally' ? targetUid : undefined });
+      return;
+    }
+
+    const uid = payload.uid || selected?.uid;
     if (!uid) return;
     const current = stateCard(uid);
     if (!current || current.zone !== 'hand') return;
     const cardDef = definition(current.instance.cardId);
     if (!cardDef) return;
-
-    const targetCardEl = event.target.closest('.game-card');
-    const targetSlotEl = event.target.closest('.board-slot');
 
     // 1. 드롭 대상이 필드의 몹 카드인 경우
     if (targetCardEl) {
@@ -1250,6 +1356,8 @@
 
   $('#my-board').addEventListener('dragover', handleDragOver);
   $('#opponent-board').addEventListener('dragover', handleDragOver);
+  $('#my-board').addEventListener('dragleave', handleDragLeave);
+  $('#opponent-board').addEventListener('dragleave', handleDragLeave);
   $('#my-board').addEventListener('drop', handleDrop);
   $('#opponent-board').addEventListener('drop', handleDrop);
 
