@@ -1163,8 +1163,14 @@
     }
     const uid = card.dataset.uid;
     setDragPayload(event, { kind: 'hand', uid });
-    selected = { uid, zone: 'hand' };
-    render();
+    // 드래그가 시작된 직후 손패를 다시 렌더링하면 브라우저가 드래그 중인
+    // DOM 노드를 잃어버려 drop 이벤트가 취소됩니다. 선택 상태는 유지하지
+    // 않고, drop에서 payload를 기준으로 처리합니다.
+    card.classList.add('is-dragging');
+  });
+
+  $('#my-hand').addEventListener('dragend', () => {
+    document.querySelectorAll('.is-dragging, .drag-over').forEach((element) => element.classList.remove('is-dragging', 'drag-over'));
   });
 
   $('#my-board').addEventListener('dragstart', (event) => {

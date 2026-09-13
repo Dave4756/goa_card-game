@@ -79,6 +79,8 @@ test('two players receive private hands and a synchronized game state', async (t
   const p2Mob = secondState.me.hand.find(c => c.cardId !== 'nature-disaster' && c.cardId !== 'gyarados');
   const p1Placed = await emit(first, 'gameAction', { type: 'play', cardUid: p1Mob.uid });
   assert.equal(p1Placed.ok, true);
+  await wait(50);
+  assert.equal(secondState.opponent.board.length, 1, 'the second player must immediately see the first player\'s starter mob');
   const p2Placed = await emit(second, 'gameAction', { type: 'play', cardUid: p2Mob.uid });
   assert.equal(p2Placed.ok, true);
 
@@ -107,4 +109,35 @@ test('two players receive private hands and a synchronized game state', async (t
   const blocked = await emit(inactive, 'gameAction', { type: 'draw' });
   assert.equal(blocked.ok, false);
   assert.match(blocked.message, /상대의 턴/);
+});
+
+test('a duplicated browser player id creates a second lobby player instead of replacing the host', async (t) => {
+  const port = 3700 + Math.floor(Math.random() * 200);
+  const server = spawn(process.execPath, ['server.js'], {
+    cwd: process.cwd(), env: { ...process.env, PORT: String(port) }, stdio: ['ignore', 'pipe', 'pipe']
+  });
+  t.after(() => server.kill());
+  await new Promise((resolve, reject) => {
+    let output = '';
+    const timer = setTimeout(() => reject(new Error(`Server did not start: ${output}`)), 5000);
+    server.stdout.on('data', (chunk) => { output += chunk; if (output.includes('서버가')) { clearTimeout(timer); resolve(); } });
+    server.stderr.on('data', (chunk) => { output += chunk; });
+  });
+  const first = await connect(`http://127.0.0.1:${port}`);
+  const second = await connect(`http://127.0.0.1:${port}`);
+  t.after(() => first.close());
+  t.after(() => second.close());
+  let firstState;
+  let secondState;
+  first.on('gameState', (next) => { firstState = next; });
+  second.on('gameState', (next) => { secondState = next; });
+  const sameId = 'duplicated-tab-player-id';
+  const created = await emit(first, 'createRoom', { name: '호스트', playerId: sameId });
+  assert.equal(created.ok, true);
+  const joined = await emit(second, 'joinRoom', { code: created.code, name: '참가자', playerId: sameId });
+  assert.equal(joined.ok, true);
+  assert.notEqual(joined.playerId, sameId);
+  await wait(100);
+  assert.equal(firstState.opponent.name, '참가자');
+  assert.equal(secondState.opponent.name, '호스트');
 });
