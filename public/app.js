@@ -35,8 +35,11 @@
   let state = null;
   let selected = null;
   let pending = null;
-  let activeRoomCode = null;
-  let playerId = localStorage.getItem('goa-player-id') || makePlayerId();
+  let playerId = sessionStorage.getItem('goa-player-id');
+  if (!playerId) {
+    playerId = makePlayerId();
+    sessionStorage.setItem('goa-player-id', playerId);
+  }
   let currentCustomDeck = [];
   let isMatchmaking = false;
   let socket;
@@ -45,7 +48,7 @@
   let showingEffect = false;
   let toastTimer;
 
-  localStorage.setItem('goa-player-id', playerId);
+  sessionStorage.setItem('goa-player-id', playerId);
   nameInput.value = localStorage.getItem('goa-player-name') || '';
   const urlRoom = new URLSearchParams(location.search).get('room');
   if (urlRoom) roomInput.value = urlRoom.toUpperCase().slice(0, 5);
@@ -401,7 +404,7 @@
     }
     closePlayModal();
     playerId = reply.playerId;
-    localStorage.setItem('goa-player-id', playerId);
+    sessionStorage.setItem('goa-player-id', playerId);
     activeRoomCode = reply.code;
     updateRoomUrl(reply.code);
   }
@@ -587,36 +590,86 @@
     const card = definition(current.instance.cardId);
     const own = current.owner === 'me';
 
-    // 1. 내 필드의 몹 카드인 경우: 특성/부착물 상세 정보 표시 없이 오직 스킬 버튼만 깔끔하게 노출
-    if (own && current.zone === 'board' && card.type === 'mob') {
-      const isReady = state.isMyTurn && !current.instance.skillUsed && (current.instance.solarTurns || 0) <= 0;
-      const skills = card.skills.filter((skill) => skill.effect !== 'passive').map((skill) => {
-        const unavailable = !isReady ? 'disabled' : '';
-        return `<button class="big-skill-button" type="button" data-skill="${skill.id}" data-source="${current.instance.uid}" ${unavailable}>
-          <strong>⚡ ${escapeHtml(skill.name)}</strong>
-          <small>${escapeHtml(skill.text || '')}</small>
-        </button>`;
-      }).join('');
+    // 1. 필드 위의 몹 카드인 경우 (내 몹 또는 상대 몹)
+    if (current.zone === 'board' && card.type === 'mob') {
+      const mob = current.instance;
+      const isReady = own && state.isMyTurn && !mob.skillUsed && (mob.solarTurns || 0) <= 0;
+      const hpPercent = Math.max(0, Math.min(100, (mob.hp / mob.maxHp) * 100));
+
+      const passiveHtml = card.passive
+        ? `<div class="passive-box"><span>특성 · ${escapeHtml(card.passive.name)}</span><p>${escapeHtml(card.passive.text)}</p></div>`
+        : '';
+
+      const attachmentsHtml = mob.attachments?.length
+        ? `<div class="detail-line"><span>부착 아이템</span><b>${mob.attachments.map(id => escapeHtml(definition(id)?.name || id)).join(', ')}</b></div>`
+        : '';
+
+      const statusDesc = statusText(mob);
+      const statusLineHtml = statusDesc !== '없음'
+        ? `<div class="detail-line"><span>상태 이상/스택</span><b>${escapeHtml(statusDesc)}</b></div>`
+        : '';
+
+      const skills = card.skills?.filter((skill) => skill.effect !== 'passive').map((skill) => {
+        if (own) {
+          const unavailable = !isReady ? 'disabled' : '';
+          return `<button class="big-skill-button" type="button" data-skill="${skill.id}" data-source="${mob.uid}" ${unavailable}>
+            <strong>⚡ ${escapeHtml(skill.name)}</strong>
+            <small>${escapeHtml(skill.text || '')}</small>
+          </button>`;
+        } else {
+          return `<div class="big-skill-button" style="cursor:default; opacity:0.88; background:rgba(20,40,42,0.6); border-color:rgba(120,160,155,0.25);">
+            <strong>⚡ ${escapeHtml(skill.name)}</strong>
+            <small>${escapeHtml(skill.text || '')}</small>
+          </div>`;
+        }
+      }).join('') || '<p class="empty-copy">보유 스킬이 없습니다.</p>';
 
       let action = '';
-      if (state.isMyTurn && card.id === 'nature-disaster') {
+      if (own && state.isMyTurn && card.id === 'nature-disaster') {
         action += '<button class="button special-action" type="button" data-devour style="margin-top:0.4rem; width:100%;">다른 아군 몹 포식</button>';
       }
 
+      const ownerTag = own ? '<span style="color:#62d2bd; font-weight:800;">[아군]</span>' : '<span style="color:#f0a29b; font-weight:800;">[상대]</span>';
+      const statusNotice = own
+        ? (mob.skillUsed ? '이번 턴 스킬 사용 완료' : (state.isMyTurn ? '스킬 누르면 대상 선택 후 턴 종료' : '상대 턴'))
+        : '상대 몹 상세 정보';
+
+      const artContent = card.image
+        ? `<img class="inspector-thumb-img" src="${cardImageUrl(card.image)}" alt="${escapeHtml(card.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='';" /><span style="display:none;">${escapeHtml(card.visual?.icon || '◆')}</span>`
+        : `<span>${escapeHtml(card.visual?.icon || '◆')}</span>`;
+
       inspector.innerHTML = `
-        <div class="simplified-skill-box" style="--card-accent:${cardColor(card)}">
-          <div class="simplified-skill-title">
-            <span>${escapeHtml(card.name)}</span>
-            <small>${current.instance.skillUsed ? '이번 턴 스킬 사용 완료' : (state.isMyTurn ? '스킬 누르면 대상 선택 후 턴 종료' : '상대 턴')}</small>
+        <div class="inspector-card" style="--card-accent:${cardColor(card)}">
+          <div class="inspector-heading">
+            <div class="detail-icon">${artContent}</div>
+            <div>
+              <p>${ownerTag} 몹 카드</p>
+              <h2>${escapeHtml(card.name)}</h2>
+            </div>
           </div>
-          ${skills || '<p class="empty-copy">사용할 수 있는 스킬이 없습니다.</p>'}
+          <div class="detail-health">
+            <span>HP</span>
+            <b>${mob.hp}</b>
+            <small>/ ${mob.maxHp}</small>
+          </div>
+          <div class="health-bar"><i style="width:${hpPercent}%"></i></div>
+          ${passiveHtml}
+          ${attachmentsHtml}
+          ${statusLineHtml}
+          <div class="simplified-skill-title" style="margin-top:0.6rem;">
+            <span>스킬</span>
+            <small>${statusNotice}</small>
+          </div>
+          <div class="skill-list" style="margin-top:0.4rem;">
+            ${skills}
+          </div>
           ${action}
         </div>
       `;
       return;
     }
 
-    // 2. 내 손패 카드인 경우: 간결한 사용 버튼 제공
+    // 2. 내 손패 카드인 경우: 상세 정보 및 직관적 사용 버튼 제공
     if (own && current.zone === 'hand') {
       let action = '';
       if (state.isMyTurn) {
@@ -631,21 +684,33 @@
         }
       }
 
+      const passiveHtml = card.passive
+        ? `<div class="passive-box"><span>특성 · ${escapeHtml(card.passive.name)}</span><p>${escapeHtml(card.passive.text)}</p></div>`
+        : '';
+
+      const artContent = card.image
+        ? `<img class="inspector-thumb-img" src="${cardImageUrl(card.image)}" alt="${escapeHtml(card.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='';" /><span style="display:none;">${escapeHtml(card.visual?.icon || '◆')}</span>`
+        : `<span>${escapeHtml(card.visual?.icon || '◆')}</span>`;
+
       inspector.innerHTML = `
-        <div class="simplified-skill-box" style="--card-accent:${cardColor(card)}">
-          <div class="simplified-skill-title">
-            <span>${escapeHtml(card.name)}</span>
-            <small>${card.type === 'mob' ? '몹' : card.type === 'attachment' ? '부착형 아이템' : '소모형 아이템'}</small>
+        <div class="inspector-card" style="--card-accent:${cardColor(card)}">
+          <div class="inspector-heading">
+            <div class="detail-icon">${artContent}</div>
+            <div>
+              <p>${card.type === 'mob' ? '몹 카드' : card.type === 'attachment' ? '부착형 아이템' : '소모형 아이템'}</p>
+              <h2>${escapeHtml(card.name)}</h2>
+            </div>
           </div>
-          <p style="color:#dcebe7; font-size:0.85rem; margin:0.4rem 0;">${escapeHtml(card.text || (card.type === 'mob' ? `HP ${card.hp}` : ''))}</p>
+          ${card.type === 'mob' ? `<div class="detail-health"><span>기본 HP</span><b>${card.hp}</b></div>` : ''}
+          <p class="detail-text">${escapeHtml(card.text || '')}</p>
+          ${passiveHtml}
           ${action}
         </div>
       `;
       return;
     }
 
-    // 그 외(상대 카드 등): 상세 정보 창을 띄우지 않음
-    inspector.innerHTML = `<div class="inspector-empty"><span class="inspect-icon">⚔</span><strong>스킬 & 행동</strong><p>내 필드의 몹을 클릭하면 즉시 스킬을 사용할 수 있습니다.</p></div>`;
+    inspector.innerHTML = `<div class="inspector-empty"><span class="inspect-icon">⚔</span><strong>카드 상세 & 스킬</strong><p>필드 또는 손패의 카드를 클릭하면 상세 정보와 스킬을 사용할 수 있습니다.</p></div>`;
   }
 
   function statusText(mob) {
@@ -745,14 +810,7 @@
         chooseTarget(uid, owner);
         return;
       }
-      if (owner === 'me') {
-        chooseCard(uid, 'board');
-      } else {
-        // 상대 카드 클릭 시 상세 정보 모달이나 창이 뜨지 않도록 선택 해제
-        selected = null;
-        pending = null;
-        render();
-      }
+      chooseCard(uid, 'board');
       return;
     }
     if (slot.dataset.owner === 'me' && state?.isMyTurn) {

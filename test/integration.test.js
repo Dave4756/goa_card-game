@@ -57,13 +57,28 @@ test('two players receive private hands and a synchronized game state', async (t
   assert.equal(joined.ok, true);
 
   await wait(120);
+  assert.equal(firstState.status, 'setup');
+  assert.equal(secondState.status, 'setup');
+  assert.equal(firstState.me.hand.length, 3);
+  assert.equal(secondState.me.hand.length, 3);
+
+  // Both players place starter mob
+  const p1Mob = firstState.me.hand.find(c => c.cardId !== 'nature-disaster' && c.cardId !== 'gyarados');
+  const p2Mob = secondState.me.hand.find(c => c.cardId !== 'nature-disaster' && c.cardId !== 'gyarados');
+  const p1Placed = await emit(first, 'gameAction', { type: 'play', cardUid: p1Mob.uid });
+  assert.equal(p1Placed.ok, true);
+  const p2Placed = await emit(second, 'gameAction', { type: 'play', cardUid: p2Mob.uid });
+  assert.equal(p2Placed.ok, true);
+
+  // Wait for coin-flip animation to finish and status to become playing
+  await wait(2900);
   assert.equal(firstState.status, 'playing');
   assert.equal(secondState.status, 'playing');
-  assert.equal(firstState.me.hand.length, 4);
-  assert.equal(secondState.me.hand.length, 4);
+  assert.equal(firstState.me.hand.length, 2);
+  assert.equal(secondState.me.hand.length, 2);
   assert.equal(firstState.opponent.hand, undefined, 'opponent hand contents must remain private');
   assert.equal(secondState.opponent.hand, undefined, 'opponent hand contents must remain private');
-  assert.equal(firstState.opponent.handCount, 4);
+  assert.equal(firstState.opponent.handCount, 2);
   assert.equal(firstState.me.board.length, 1);
   assert.equal(secondState.me.board.length, 1);
 
@@ -75,7 +90,7 @@ test('two players receive private hands and a synchronized game state', async (t
   await wait(80);
   const afterDraw = firstState.isMyTurn ? firstState : secondState;
   assert.equal(afterDraw.me.drawUsed, true);
-  assert.equal(afterDraw.me.hand.length, 5);
+  assert.equal(afterDraw.me.hand.length, 3);
 
   const blocked = await emit(inactive, 'gameAction', { type: 'draw' });
   assert.equal(blocked.ok, false);

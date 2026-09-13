@@ -254,9 +254,11 @@ function emitState(room) {
 }
 
 function playerForSocket(socket) {
-  const room = rooms.get(socket.data.roomCode);
+  const room = rooms.get(socket.data?.roomCode);
   if (!room) return null;
-  const player = room.players.find((entry) => entry.id === socket.data.playerId);
+  const player = room.players.find((entry) => entry.socketId === socket.id)
+    || (socket.data?.seat !== undefined ? room.players[socket.data.seat] : null)
+    || room.players.find((entry) => entry.id === socket.data?.playerId);
   if (!player) return null;
   return { room, player };
 }
@@ -972,6 +974,7 @@ function joinSocketToRoom(socket, room, player) {
   socket.join(room.code);
   socket.data.roomCode = room.code;
   socket.data.playerId = player.id;
+  socket.data.seat = player.seat;
   player.socketId = socket.id;
   player.connected = true;
 }
@@ -1000,15 +1003,18 @@ function tryMatchmaking() {
     }
 
     const code = makeRoomCode();
+    const p1Id = entry1.playerId;
+    const p2Id = entry2.playerId === entry1.playerId ? `${entry2.playerId}_2` : entry2.playerId;
+
     const player1 = newPlayer({
-      id: entry1.playerId,
+      id: p1Id,
       name: entry1.name,
       socketId: entry1.socket.id,
       seat: 0,
       customDeck: entry1.customDeck
     });
     const player2 = newPlayer({
-      id: entry2.playerId,
+      id: p2Id,
       name: entry2.name,
       socketId: entry2.socket.id,
       seat: 1,
