@@ -850,7 +850,10 @@
         chooseTarget(uid, owner);
         return;
       }
+      // 필드 카드는 짧게 클릭하면 전용 상세 창을 열어, 정보 확인과
+      // 스킬 선택을 한곳에서 하도록 합니다.
       chooseCard(uid, 'board');
+      openFieldCardModal(uid);
       return;
     }
     if (slot.dataset.owner === 'me' && state?.isMyTurn) {
@@ -936,6 +939,49 @@
       ? `<img class="card-art-img" src="${cardImageUrl(card.image)}" alt="${escapeHtml(card.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='';" /><span style="display:none;">${escapeHtml(card.visual?.icon || '◆')}</span>`
       : `<span>${escapeHtml(card.visual?.icon || '◆')}</span>`;
     return `<article class="modal-card-detail" style="--card-accent:${cardColor(card)}"><div class="modal-card-art">${modalArt}</div><div><p class="eyebrow">${isMob ? '몹 카드' : card.type === 'attachment' ? '부착형 아이템' : '소모형 아이템'}</p><h2>${escapeHtml(card.name)}</h2>${isMob ? `<p class="modal-hp">HP <b>${instance?.hp ?? card.hp}</b> / ${instance?.maxHp ?? card.hp}</p>` : `<p>${escapeHtml(card.text)}</p>`}${passive}${skills ? `<ul class="modal-skills">${skills}</ul>` : ''}</div></article>`;
+  }
+
+  function buffText(mob) {
+    const buffs = [];
+    const debuffs = [];
+    if (mob.attachments?.includes('learning')) buffs.push('학습력: 주는 피해 +10');
+    if (mob.attachments?.includes('patience')) buffs.push('인내력: 받는 피해 -15');
+    if (mob.attachments?.includes('sociability')) buffs.push('사회 친화력: 턴 시작 회복');
+    if (mob.stacks?.overcharge) buffs.push(`과충전 ${mob.stacks.overcharge}스택`);
+    if (mob.stacks?.fuel) buffs.push(`과열된 연료 ${mob.stacks.fuel}스택`);
+    if (mob.modifiers?.damageBonus) buffs.push(`영구 공격력 +${mob.modifiers.damageBonus}`);
+    if (mob.modifiers?.nextDamageMultiplier < 1) buffs.push('다음 피해 감소');
+    if (mob.statuses?.confusion) debuffs.push('혼란');
+    if (mob.statuses?.burn) debuffs.push('화상');
+    if (mob.statuses?.sleep) debuffs.push('잠듦');
+    if (mob.modifiers?.nextAttackHalf) debuffs.push('다음 공격 피해 절반');
+    if (mob.modifiers?.nextAttackWeak) debuffs.push('다음 공격 피해 -50%');
+    return { buffs, debuffs };
+  }
+
+  function openFieldCardModal(uid) {
+    const current = stateCard(uid);
+    if (!current || current.zone !== 'board') return;
+    const card = definition(current.instance.cardId);
+    if (!card) return;
+    const mob = current.instance;
+    const { buffs, debuffs } = buffText(mob);
+    const own = current.owner === 'me';
+    const usable = own && state?.isMyTurn && !mob.skillUsed && !mob.solarTurns;
+    const attachmentNames = mob.attachments?.length
+      ? mob.attachments.map((id) => `<li><span>${escapeHtml(definition(id)?.visual?.icon || '◆')}</span>${escapeHtml(definition(id)?.name || id)}</li>`).join('')
+      : '<li class="empty-copy">부착된 아이템 없음</li>';
+    const skillButtons = card.skills?.filter((skill) => skill.effect !== 'passive').map((skill) => {
+      if (!own) return `<li class="modal-skill locked"><strong>${escapeHtml(skill.name)}</strong><span>${escapeHtml(skill.text)}</span></li>`;
+      return `<li><button class="modal-skill" type="button" data-modal-skill="${skill.id}" data-modal-source="${mob.uid}" ${usable ? '' : 'disabled'}><strong>${escapeHtml(skill.name)}</strong><span>${escapeHtml(skill.text)}</span></button></li>`;
+    }).join('') || '<li class="empty-copy">사용 가능한 스킬 없음</li>';
+    const passive = card.passive ? `<div class="modal-passive"><strong>특성 · ${escapeHtml(card.passive.name)}</strong><p>${escapeHtml(card.passive.text)}</p></div>` : '';
+    openModal(`<article class="field-card-modal" style="--card-accent:${cardColor(card)}">
+      <div class="field-modal-heading"><span class="field-modal-icon">${escapeHtml(card.visual?.icon || '◆')}</span><div><p class="eyebrow">${own ? '내 필드 몹' : '상대 필드 몹'}</p><h2>${escapeHtml(card.name)}</h2><p class="modal-hp">HP <b>${mob.hp}</b> / ${mob.maxHp}</p></div></div>
+      ${passive}
+      <div class="field-info-grid"><section><h3>부착 아이템</h3><ul class="attachment-detail-list">${attachmentNames}</ul></section><section><h3>현재 버프</h3><ul>${buffs.length ? buffs.map((item) => `<li>${escapeHtml(item)}</li>`).join('') : '<li class="empty-copy">적용 중인 버프 없음</li>'}</ul></section><section><h3>현재 디버프</h3><ul>${debuffs.length ? debuffs.map((item) => `<li>${escapeHtml(item)}</li>`).join('') : '<li class="empty-copy">적용 중인 디버프 없음</li>'}</ul></section></div>
+      <section class="modal-skill-section"><div><h3>스킬 선택</h3><small>${own ? (usable ? '스킬을 선택하세요.' : mob.skillUsed ? '이번 턴에는 이미 스킬을 사용했습니다.' : '지금은 사용할 수 없습니다.') : '상대 카드의 스킬 정보입니다.'}</small></div><ul>${skillButtons}</ul></section>
+    </article>`);
   }
 
   function openModal(content) {
@@ -1135,6 +1181,21 @@
     if (detail) {
       const card = definition(detail.dataset.detailCard);
       if (card) openModal(cardDetailMarkup(card));
+    }
+    const skillButton = event.target.closest('[data-modal-skill]');
+    if (skillButton) {
+      const source = stateCard(skillButton.dataset.modalSource)?.instance;
+      const skill = definition(source?.cardId)?.skills?.find((entry) => entry.id === skillButton.dataset.modalSkill);
+      if (!source || !skill || skillButton.disabled) return;
+      closeModal();
+      if (skill.target === 'enemy') {
+        pending = { type: 'skill', target: 'enemy', sourceUid: source.uid, skillId: skill.id };
+        selected = { uid: source.uid, zone: 'board' };
+        render();
+        showToast('공격할 상대 몹을 선택하세요.');
+      } else {
+        doAction({ type: 'skill', sourceUid: source.uid, skillId: skill.id });
+      }
     }
   });
 

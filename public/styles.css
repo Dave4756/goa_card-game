@@ -409,6 +409,27 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .deck-preview { display: grid; width: 110px; height: 145px; margin: 1rem auto; place-items: center; border: 2px solid #668981; border-radius: 8px; color: #e0bc68; background: repeating-linear-gradient(45deg, #174144, #174144 6px, #0c292c 6px, #0c292c 12px); box-shadow: 8px 8px 0 #082023, 15px 15px 0 rgba(62, 111, 107, .6); font-size: 2rem; }
 .rules-modal ul { padding-left: 1.2rem; }
 .rules-modal h3 { margin-top: 1rem; color: #e6ca82; font-size: .9rem; }
+.field-card-modal { padding: 1.45rem; }
+.field-modal-heading { display: flex; align-items: center; gap: .8rem; padding-right: 2rem; }
+.field-modal-icon { display: grid; width: 58px; height: 66px; flex: 0 0 auto; place-items: center; border: 2px solid var(--card-accent); border-radius: 10px; color: var(--card-accent); background: color-mix(in srgb, var(--card-accent), transparent 86%); font-size: 2rem; }
+.field-modal-heading h2 { margin: .15rem 0; color: #f1f5df; font-family: Georgia, "Noto Serif KR", serif; letter-spacing: -.06em; }
+.field-modal-heading .modal-hp { margin: 0; }
+.field-info-grid { display: grid; margin: .9rem 0; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+.field-info-grid section { min-height: 104px; padding: .6rem; border: 1px solid rgba(145, 204, 192, .18); border-radius: 8px; background: rgba(0, 0, 0, .14); }
+.field-info-grid h3, .modal-skill-section h3 { margin: 0 0 .4rem; color: #ead18b; font-size: .68rem; }
+.field-info-grid ul, .modal-skill-section ul { margin: 0; padding: 0; list-style: none; }
+.field-info-grid li { padding: .12rem 0; color: #b6d1c9; font-size: .65rem; line-height: 1.35; }
+.attachment-detail-list span { display: inline-grid; width: 17px; height: 17px; margin-right: .25rem; place-items: center; border: 1px solid #807657; border-radius: 3px; color: #ecdb99; background: #273637; font-size: .58rem; }
+.modal-skill-section { padding-top: .75rem; border-top: 1px solid rgba(145, 204, 192, .2); }
+.modal-skill-section > div { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; }
+.modal-skill-section small { color: #87a8a0; font-size: .62rem; }
+.modal-skill-section ul { display: grid; margin-top: .45rem; gap: .4rem; }
+.modal-skill { display: grid; width: 100%; padding: .6rem .7rem; grid-template-columns: minmax(110px, .85fr) 1.8fr; gap: .5rem; border: 1px solid rgba(104, 215, 193, .34); border-radius: 8px; color: #dff6ef; background: rgba(18, 66, 66, .64); text-align: left; transition: transform .15s, border-color .15s, background .15s; }
+.modal-skill:not(:disabled):hover { border-color: var(--card-accent); background: color-mix(in srgb, var(--card-accent), transparent 85%); transform: translateY(-1px); }
+.modal-skill:disabled { opacity: .43; }
+.modal-skill strong { color: #f6df92; font-size: .72rem; }
+.modal-skill span { color: #a8c6be; font-size: .66rem; line-height: 1.35; }
+.modal-skill.locked { display: grid; padding: .6rem .7rem; grid-template-columns: minmax(110px, .85fr) 1.8fr; gap: .5rem; border: 1px solid rgba(133, 168, 161, .18); border-radius: 8px; color: #afc3be; background: rgba(0,0,0,.12); }
 .effect-layer { position: fixed; z-index: 20; top: 10%; left: 50%; pointer-events: none; transform: translateX(-50%); }
 .effect-banner { display: flex; min-width: 180px; max-width: min(90vw, 420px); padding: .7rem 1rem; align-items: center; justify-content: center; gap: .45rem; border: 1px solid rgba(231, 208, 137, .6); border-radius: 10px; color: #fff8d5; background: rgba(16, 39, 39, .9); box-shadow: 0 12px 35px rgba(0,0,0,.38), 0 0 25px rgba(243, 207, 100, .18); backdrop-filter: blur(8px); animation: banner-in .2s ease-out both; text-align: center; }
 .effect-banner strong { font-size: .82rem; }
@@ -471,6 +492,8 @@ button:disabled { cursor: not-allowed; opacity: .42; }
   .hand-card { width: 92px; min-width: 92px; height: 125px; }
   .hand-icon { height: 42px; font-size: 1.4rem; }
   .modal-card-detail { grid-template-columns: 95px 1fr; padding: 1.1rem; gap: .85rem; }
+  .field-info-grid { grid-template-columns: 1fr; }
+  .field-info-grid section { min-height: auto; }
   .modal-card-art { min-height: 145px; font-size: 2.8rem; }
 }
 
@@ -492,6 +515,8 @@ button:disabled { cursor: not-allowed; opacity: .42; }
   .status { padding: 1px; font-size: .34rem; }
   .skill-list { grid-template-columns: 1fr; }
   .modal-card-detail { display: block; padding: 1rem; }
+  .field-card-modal { padding: 1rem; }
+  .modal-skill, .modal-skill.locked { grid-template-columns: 1fr; gap: .2rem; }
   .modal-card-art { width: 100%; min-height: 100px; margin-bottom: .8rem; }
 }
 
