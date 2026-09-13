@@ -1077,7 +1077,14 @@ io.on('connection', (socket) => {
       const room = rooms.get(code);
       if (!room) throw new Error('존재하지 않거나 만료된 방 코드입니다.');
       const playerId = typeof data?.playerId === 'string' ? data.playerId : '';
+      // 브라우저 탭 복제 시 sessionStorage의 playerId도 복제될 수 있습니다.
+      // 기존 접속자가 살아 있는 경우에는 재접속으로 취급하면 두 번째 사람이
+      // 첫 번째 사람을 덮어써서 상대 필드가 보이지 않게 됩니다. 이때는 새
+      // 플레이어로 입장하도록 아래의 일반 입장 경로를 사용합니다.
       let player = room.players.find((entry) => entry.id === playerId);
+      if (player && player.connected && player.socketId && player.socketId !== socket.id) {
+        player = null;
+      }
       if (player) {
         if (Array.isArray(data?.customDeck)) player.customDeck = data.customDeck;
         joinSocketToRoom(socket, room, player);
@@ -1086,7 +1093,7 @@ io.on('connection', (socket) => {
         if (room.status !== 'lobby' || room.players.length >= 2) throw new Error('이 방은 이미 가득 찼습니다.');
         const name = cleanName(data?.name);
         player = newPlayer({
-          id: playerId.length >= 8 ? playerId : makeId('p'),
+          id: room.players.some((entry) => entry.id === playerId) ? makeId('p') : (playerId.length >= 8 ? playerId : makeId('p')),
           name,
           socketId: socket.id,
           seat: room.players.length,
