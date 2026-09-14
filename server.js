@@ -231,6 +231,7 @@ function viewFor(room, seat) {
   });
   return {
     roomCode: room.code,
+    seat,
     status: room.status,
     turnNumber: room.turnNumber,
     activeSeat: room.activeSeat,
@@ -249,7 +250,11 @@ function viewFor(room, seat) {
 
 function emitState(room) {
   room.players.forEach((player) => {
-    if (player.socketId) io.to(player.socketId).emit('gameState', viewFor(room, player.seat));
+    // socket.id를 방 이름으로 다시 조회하지 않고 현재 연결된 소켓에 직접
+    // 전송합니다. 재연결·탭 복제 뒤에도 각 플레이어가 상대 필드 상태를
+    // 확실히 받도록 하기 위함입니다.
+    const destination = player.socketId ? io.sockets.sockets.get(player.socketId) : null;
+    if (destination) destination.emit('gameState', viewFor(room, player.seat));
   });
 }
 

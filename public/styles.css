@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Jua&family=Nunito:wght@400;600;700;800;900&display=swap');
+
 :root {
   color-scheme: dark;
   --ink: #e8f4f0;
@@ -10,7 +12,7 @@
   --coral: #ec7d75;
   --card: #f5f0df;
   --card-ink: #17262b;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+  font-family: "Jua", "Arial Rounded MT Bold", "NanumSquareRound", "Malgun Gothic", sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -50,7 +52,7 @@ button:disabled { cursor: not-allowed; opacity: .42; }
   background-attachment: fixed;
 }
 .brand-mark { display: grid; width: 70px; height: 70px; margin-bottom: 1rem; place-items: center; border: 1px solid rgba(228, 188, 100, .8); border-radius: 20px 5px 20px 5px; color: #efcd77; font-size: 2rem; font-weight: 900; box-shadow: inset 0 0 30px rgba(223, 177, 69, .14), 0 0 30px rgba(232, 183, 67, .11); transform: rotate(-5deg); }
-.lobby-screen h1 { margin: .35rem 0 .55rem; font-family: Georgia, "Noto Serif KR", serif; font-size: clamp(2.6rem, 8vw, 5.5rem); font-weight: 800; letter-spacing: -.09em; line-height: .95; text-shadow: 0 4px 15px rgba(0,0,0,0.6); }
+.lobby-screen h1 { margin: .35rem 0 .55rem; font-family: "Jua", "Arial Rounded MT Bold", "NanumSquareRound", sans-serif; font-size: clamp(2.6rem, 8vw, 5.5rem); font-weight: 800; letter-spacing: -.06em; line-height: .95; text-shadow: 0 4px 15px rgba(0,0,0,0.6); }
 .lobby-screen h1 em { color: #e4bf69; font-style: normal; }
 .lobby-copy { max-width: 27rem; margin: 0 0 2rem; color: #b0cfc8; font-size: .95rem; line-height: 1.7; text-shadow: 0 2px 8px rgba(0,0,0,0.5); }
 
@@ -141,7 +143,7 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 /* Main game layout */
 .game-screen { min-height: 100vh; padding: 0 1rem 1rem; }
 .game-header { display: flex; max-width: 1560px; min-height: 64px; margin: auto; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line); }
-.mini-brand { display: flex; padding: 0; align-items: center; gap: .45rem; border: 0; color: #dcebe7; background: transparent; font-family: Georgia, "Noto Serif KR", serif; font-size: 1.05rem; font-weight: 800; }
+.mini-brand { display: flex; padding: 0; align-items: center; gap: .45rem; border: 0; color: #dcebe7; background: transparent; font-family: "Jua", "Arial Rounded MT Bold", sans-serif; font-size: 1.05rem; font-weight: 800; }
 .mini-brand span { display: grid; width: 29px; height: 29px; place-items: center; border: 1px solid var(--gold); border-radius: 7px 2px 7px 2px; color: var(--gold); font-family: Inter, sans-serif; font-size: .9rem; }
 .turn-announcement { min-width: 7.5rem; padding: .4rem .8rem; border: 1px solid transparent; border-radius: 99px; color: #9bb8b1; font-size: .77rem; font-weight: 800; text-align: center; }
 .turn-announcement.my-turn { border-color: rgba(94, 212, 192, .35); color: #9ff1df; background: rgba(51, 177, 153, .12); box-shadow: 0 0 18px rgba(75, 209, 184, .1); }
@@ -310,7 +312,7 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .card-art::before, .card-art::after { position: absolute; width: 130%; height: 1px; background: color-mix(in srgb, var(--card-accent), transparent 30%); content: ""; transform: rotate(-28deg); opacity: .5; }
 .card-art::after { transform: rotate(35deg); }
 .card-art span { position: relative; z-index: 1; font-size: clamp(1.8rem, 3.5vw, 2.7rem); text-shadow: 0 2px 0 rgba(255,255,255,.6); }
-.game-card h3 { position: relative; z-index: 1; min-height: 1.8em; margin: 0; overflow: hidden; color: #1d2e31; font-family: Georgia, "Noto Serif KR", serif; font-size: clamp(.65rem, 1.2vw, .88rem); font-weight: 900; letter-spacing: -.06em; line-height: 1.1; }
+.game-card h3 { position: relative; z-index: 1; min-height: 1.8em; margin: 0; overflow: hidden; color: #1d2e31; font-family: "Jua", "Arial Rounded MT Bold", sans-serif; font-size: clamp(.65rem, 1.2vw, .88rem); font-weight: 900; letter-spacing: -.03em; line-height: 1.1; }
 .health { position: relative; z-index: 1; display: flex; margin-top: auto; align-items: baseline; gap: .15rem; color: #707a73; font-size: .48rem; font-weight: 800; }
 .health b { color: #af3237; font-size: .95rem; line-height: 1; }
 .health i { font-size: .52rem; font-style: normal; }
@@ -375,7 +377,7 @@ button:disabled { cursor: not-allowed; opacity: .42; }
   background: radial-gradient(circle, color-mix(in srgb, var(--card-accent), white 61%), #c7dbc8);
   font-size: 2.1rem;
 }
-.hand-card h3 { position: relative; z-index: 1; min-height: 1.8em; margin: 0; overflow: hidden; font-family: Georgia, "Noto Serif KR", serif; font-size: .72rem; letter-spacing: -.06em; line-height: 1.1; }
+.hand-card h3 { position: relative; z-index: 1; min-height: 1.8em; margin: 0; overflow: hidden; font-family: "Jua", "Arial Rounded MT Bold", sans-serif; font-size: .72rem; letter-spacing: -.03em; line-height: 1.1; }
 .hand-hp { position: relative; z-index: 1; margin-top: .2rem; color: #a63f3d; font-size: .56rem; font-weight: 900; }
 .item-effect { position: relative; z-index: 1; height: 2.6em; margin: .2rem 0 0; overflow: hidden; color: #4c605b; font-size: .52rem; line-height: 1.35; }
 .hand-stacks { position: absolute; z-index: 2; right: 5px; bottom: 4px; }
