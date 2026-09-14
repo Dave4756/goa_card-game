@@ -261,6 +261,18 @@ function emitState(room) {
     const destination = player.socketId ? io.sockets.sockets.get(player.socketId) : null;
     if (destination) destination.emit('gameState', viewFor(room, player.seat));
   });
+  // 공개 필드만 따로 한 번 더 브로드캐스트합니다. 손패나 덱 순서는 포함하지
+  // 않으며, 전체 상태가 도착한 다음에 보내므로 필드가 확실히 덮어써집니다.
+  io.to(room.code).emit('boardSync', {
+    roomCode: room.code,
+    revision: (room.revision = (room.revision || 0) + 1),
+    boards: room.players.map((player) => ({
+      seat: player.seat,
+      name: player.name,
+      board: player.board.map(publicMob),
+      fieldEffect: player.fieldEffect
+    }))
+  });
 }
 
 function playerForSocket(socket) {

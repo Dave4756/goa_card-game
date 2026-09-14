@@ -60,8 +60,12 @@ test('two players receive private hands and a synchronized game state', async (t
 
   let firstState;
   let secondState;
+  let firstBoardSync;
+  let secondBoardSync;
   first.on('gameState', (next) => { firstState = next; });
   second.on('gameState', (next) => { secondState = next; });
+  first.on('boardSync', (next) => { firstBoardSync = next; });
+  second.on('boardSync', (next) => { secondBoardSync = next; });
 
   const created = await emit(first, 'createRoom', { name: '테스터 1', playerId: 'player-one-token' });
   assert.equal(created.ok, true);
@@ -81,6 +85,7 @@ test('two players receive private hands and a synchronized game state', async (t
   assert.equal(p1Placed.ok, true);
   await wait(50);
   assert.equal(secondState.opponent.board.length, 1, 'the second player must immediately see the first player\'s starter mob');
+  assert.equal(secondBoardSync.boards.find((player) => player.seat !== secondState.seat).board.length, 1, 'public board sync must include the opponent starter mob');
   const p2Placed = await emit(second, 'gameAction', { type: 'play', cardUid: p2Mob.uid });
   assert.equal(p2Placed.ok, true);
 
@@ -99,6 +104,7 @@ test('two players receive private hands and a synchronized game state', async (t
   assert.equal(secondState.players.length, 2);
   assert.equal(firstState.players.find((player) => player.seat !== firstState.seat).board.length, 1, 'seat-indexed state must include the opponent board');
   assert.equal(secondState.players.find((player) => player.seat !== secondState.seat).board.length, 1, 'seat-indexed state must include the opponent board');
+  assert.equal(firstBoardSync.boards.find((player) => player.seat !== firstState.seat).board.length, 1);
 
   const active = firstState.isMyTurn ? first : second;
   const activeState = firstState.isMyTurn ? firstState : secondState;

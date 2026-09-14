@@ -188,6 +188,21 @@
         setLobbyMessage(`방 코드 [${activeRoomCode}] 대기 중 - 상대방이 입장하면 대전이 시작됩니다.`);
       }
     });
+    socket.on('boardSync', (sync) => {
+      if (!state || sync?.roomCode !== state.roomCode || !Array.isArray(sync.boards)) return;
+      const ownSeat = state.seat;
+      const ownBoard = sync.boards.find((player) => player.seat === ownSeat);
+      const opponentBoard = sync.boards.find((player) => player.seat !== ownSeat);
+      if (ownBoard) {
+        state.me.board = ownBoard.board;
+        state.me.fieldEffect = ownBoard.fieldEffect;
+      }
+      if (opponentBoard) {
+        // 전체 gameState와 별개로 상단 상대 필드의 원본을 바로 갱신합니다.
+        state.opponent = { ...(state.opponent || {}), ...opponentBoard };
+      }
+      render();
+    });
     socket.on('matchFound', (data) => {
       isMatchmaking = false;
       if (matchmakingArea) matchmakingArea.classList.add('hidden');
