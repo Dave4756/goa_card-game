@@ -854,7 +854,10 @@
     if (card) {
       const owner = card.dataset.owner;
       const uid = card.dataset.uid;
-      if (state?.isMyTurn && canTarget(owner)) {
+      // 짧은 클릭은 항상 카드 상세를 먼저 열어야 합니다. 대상 지정은
+      // 스킬 선택 뒤의 pending 상태에서만 처리합니다. 손패가 선택된
+      // 상태였다는 이유로 상세 창이 열리지 않던 문제를 막습니다.
+      if (pending && state?.isMyTurn && canTarget(owner)) {
         chooseTarget(uid, owner);
         return;
       }
@@ -990,6 +993,18 @@
       <div class="field-info-grid"><section><h3>부착 아이템</h3><ul class="attachment-detail-list">${attachmentNames}</ul></section><section><h3>현재 버프</h3><ul>${buffs.length ? buffs.map((item) => `<li>${escapeHtml(item)}</li>`).join('') : '<li class="empty-copy">적용 중인 버프 없음</li>'}</ul></section><section><h3>현재 디버프</h3><ul>${debuffs.length ? debuffs.map((item) => `<li>${escapeHtml(item)}</li>`).join('') : '<li class="empty-copy">적용 중인 디버프 없음</li>'}</ul></section></div>
       <section class="modal-skill-section"><div><h3>스킬 선택</h3><small>${own ? (usable ? '스킬을 선택하세요.' : mob.skillUsed ? '이번 턴에는 이미 스킬을 사용했습니다.' : '지금은 사용할 수 없습니다.') : '상대 카드의 스킬 정보입니다.'}</small></div><ul>${skillButtons}</ul></section>
     </article>`);
+  }
+
+  // 카드 안의 이미지·장식 요소가 이벤트를 가로채더라도 항상 상세 창을
+  // 열도록, 필드 컨테이너에 캡처 단계 클릭 처리도 둡니다.
+  function captureFieldCardClick(event) {
+    if (event.defaultPrevented || pending) return;
+    const card = event.target.closest?.('.game-card');
+    if (!card) return;
+    event.preventDefault();
+    event.stopPropagation();
+    chooseCard(card.dataset.uid, 'board');
+    openFieldCardModal(card.dataset.uid);
   }
 
   function openModal(content) {
@@ -1171,6 +1186,8 @@
   $('#draw-button').addEventListener('click', () => doAction({ type: 'draw' }));
   $('#end-turn-button').addEventListener('click', () => doAction({ type: 'endTurn' }));
   $('#cancel-button').addEventListener('click', () => { selected = null; pending = null; render(); });
+  $('#my-board').addEventListener('click', captureFieldCardClick, true);
+  $('#opponent-board').addEventListener('click', captureFieldCardClick, true);
   $('#my-board').addEventListener('click', clickBoard);
   $('#opponent-board').addEventListener('click', clickBoard);
   $('#my-hand').addEventListener('click', clickHand);
