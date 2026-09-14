@@ -219,6 +219,7 @@ function viewFor(room, seat) {
   const me = playerBySeat(room, seat);
   const opponent = opponentOf(room, me);
   const common = (player, isMe) => ({
+    seat: player.seat,
     name: player.name,
     connected: player.connected,
     board: player.board.map(publicMob),
@@ -238,6 +239,10 @@ function viewFor(room, seat) {
     isMyTurn: (room.status === 'playing' && room.activeSeat === seat) || (room.status === 'setup' && me.board.length === 0),
     me: common(me, true),
     opponent: opponent ? common(opponent, false) : null,
+    // `me`/`opponent`와 별도로 좌석이 붙은 공개 보드 목록도 보냅니다.
+    // 클라이언트가 재연결되거나 동일한 이름을 쓸 때도 좌석 기준으로
+    // 상대 필드를 확정적으로 렌더링하기 위한 동기화용 데이터입니다.
+    players: room.players.map((player) => common(player, player.seat === seat)),
     logs: room.logs,
     winner: room.winner === null ? null : room.winner === seat ? 'me' : 'opponent',
     rules: {

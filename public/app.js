@@ -167,6 +167,14 @@
     });
     socket.on('disconnect', () => setConnection('연결 재시도 중', false));
     socket.on('gameState', (nextState) => {
+      // 서버가 보내는 좌석 기반 공개 보드를 항상 기준으로 삼습니다. 동일한
+      // 닉네임·탭 복제와 무관하게 내 좌석이 아닌 플레이어가 곧 상대입니다.
+      if (Array.isArray(nextState.players) && Number.isInteger(nextState.seat)) {
+        const ownPlayer = nextState.players.find((player) => player.seat === nextState.seat);
+        const otherPlayer = nextState.players.find((player) => player.seat !== nextState.seat);
+        if (ownPlayer) nextState.me = ownPlayer;
+        if (otherPlayer) nextState.opponent = otherPlayer;
+      }
       state = nextState;
       activeRoomCode = nextState.roomCode;
       localStorage.setItem('goa-room-code', activeRoomCode);

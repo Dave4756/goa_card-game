@@ -95,6 +95,10 @@ test('two players receive private hands and a synchronized game state', async (t
   assert.equal(firstState.opponent.handCount, 2);
   assert.equal(firstState.me.board.length, 1);
   assert.equal(secondState.me.board.length, 1);
+  assert.equal(firstState.players.length, 2);
+  assert.equal(secondState.players.length, 2);
+  assert.equal(firstState.players.find((player) => player.seat !== firstState.seat).board.length, 1, 'seat-indexed state must include the opponent board');
+  assert.equal(secondState.players.find((player) => player.seat !== secondState.seat).board.length, 1, 'seat-indexed state must include the opponent board');
 
   const active = firstState.isMyTurn ? first : second;
   const activeState = firstState.isMyTurn ? firstState : secondState;
